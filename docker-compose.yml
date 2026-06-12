@@ -1,5 +1,5 @@
-# OPCIONAL — solo si prefiere PostgreSQL local en desarrollo.
-# En produccion use Neon (gratis): https://neon.tech
+# PostgreSQL LOCAL gratuito — aislado, sin suscripciones.
+# Solo escucha en 127.0.0.1:5544 (no interfiere con otros programas).
 # Uso: docker compose up -d
 
 services:
