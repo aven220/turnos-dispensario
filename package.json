@@ -1,0 +1,22 @@
+{
+  "name": "turnos-dispensario",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "start:prod": "npm run build && npm run start --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:deploy": "npm run db:deploy --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
