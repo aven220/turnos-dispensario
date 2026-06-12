@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash('CencoicAdmin2026', 10);
 
   const admin = await prisma.user.upsert({
     where: { username: 'admin' },
@@ -22,7 +22,7 @@ async function main() {
     update: {},
     create: {
       username: 'filtro',
-      passwordHash: await bcrypt.hash('filtro123', 10),
+      passwordHash: await bcrypt.hash('CencoicFiltro2026', 10),
       fullName: 'Operador Filtro',
       role: UserRole.FILTER,
     },
@@ -33,7 +33,7 @@ async function main() {
     update: {},
     create: {
       username: 'maria',
-      passwordHash: await bcrypt.hash('ventanilla123', 10),
+      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
       fullName: 'María Gómez',
       role: UserRole.WINDOW,
     },
@@ -44,7 +44,7 @@ async function main() {
     update: {},
     create: {
       username: 'juan',
-      passwordHash: await bcrypt.hash('ventanilla123', 10),
+      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
       fullName: 'Juan Pérez',
       role: UserRole.WINDOW,
     },
@@ -55,7 +55,7 @@ async function main() {
     update: {},
     create: {
       username: 'carlos',
-      passwordHash: await bcrypt.hash('ventanilla123', 10),
+      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
       fullName: 'Carlos Ruiz',
       role: UserRole.WINDOW,
     },

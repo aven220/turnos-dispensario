@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: turnos
-      POSTGRES_PASSWORD: turnos123
+      POSTGRES_PASSWORD: TdCencoic2026Disp
       POSTGRES_DB: turnos_dispensario
     ports:
       - "127.0.0.1:5544:5432"

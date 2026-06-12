@@ -15,10 +15,62 @@ Aplicación web en tiempo real para gestión de turnos en dispensarios, centros 
 
 - **Frontend:** React 19, Vite, Tailwind CSS 4, Socket.IO Client
 - **Backend:** Node.js, Express 5, Socket.IO, Prisma
-- **Base de datos:** PostgreSQL
+- **Base de datos:** PostgreSQL (Docker)
 - **Autenticación:** JWT
 
-## Inicio rápido
+---
+
+## Credenciales del sistema
+
+> Guarde este bloque. Si el repositorio es público, cambie todas las contraseñas antes de desplegar.
+
+### Base de datos PostgreSQL
+
+| Campo | Valor |
+|-------|-------|
+| Usuario | `turnos` |
+| Contraseña | `TdCencoic2026Disp` |
+| Base de datos | `turnos_dispensario` |
+| Puerto (local) | `5544` (solo `127.0.0.1`) |
+
+### JWT (backend)
+
+```
+JWT_SECRET=cencoic-turnos-jwt-2026-k8mP2xQ9vL4nR7wZ6sH3fA1bN5jD0eU
+```
+
+### Usuarios de la aplicación
+
+| Usuario | Contraseña | Rol |
+|---------|------------|-----|
+| admin | `CencoicAdmin2026` | Administrador |
+| filtro | `CencoicFiltro2026` | Filtro |
+| maria | `CencoicVent2026` | Ventanilla 1 |
+| juan | `CencoicVent2026` | Ventanilla 2 |
+| carlos | `CencoicVent2026` | Ventanilla 3 |
+
+### Puertos
+
+| Entorno | Aplicación | PostgreSQL |
+|---------|------------|------------|
+| Desarrollo (Mac/local) | Frontend `5173` + Backend `4000` | `5544` |
+| Producción (Windows) | **Un solo puerto `8741`** | `5544` |
+
+---
+
+## Subir a GitHub
+
+```bash
+cd turnos-dispensario
+git remote add origin https://github.com/TU-USUARIO/turnos-dispensario.git
+git push -u origin main
+```
+
+Reemplace `TU-USUARIO` por su cuenta de GitHub. El archivo `backend/.env` **no** se sube (está en `.gitignore`). La plantilla con valores listos está en `deploy/windows/.env.example`.
+
+---
+
+## Desarrollo local (Mac / Linux)
 
 ### 1. Base de datos
 
@@ -26,18 +78,10 @@ Aplicación web en tiempo real para gestión de turnos en dispensarios, centros 
 docker compose up -d
 ```
 
-PostgreSQL queda en `localhost:5433`.
-
 ### 2. Configuración
 
 ```bash
 cp backend/.env.example backend/.env
-```
-
-Ajuste `DATABASE_URL` si es necesario:
-
-```
-postgresql://turnos:turnos123@localhost:5433/turnos_dispensario?schema=public
 ```
 
 ### 3. Instalar y migrar
@@ -58,47 +102,83 @@ npm run dev
 - Backend: http://localhost:4000
 - Pantalla TV: http://localhost:5173/tv
 
-## Usuarios de prueba
+---
 
-| Usuario | Contraseña | Rol |
-|---------|------------|-----|
-| admin | admin123 | Administrador |
-| filtro | filtro123 | Filtro |
-| maria | ventanilla123 | Ventanilla 1 |
-| juan | ventanilla123 | Ventanilla 2 |
-| carlos | ventanilla123 | Ventanilla 3 |
+## Producción en Windows Server
 
-> Los operadores de ventanilla deben seleccionar su ventanilla al iniciar sesión.
+### Requisitos
 
-## Reglas de negocio implementadas
+- Node.js LTS 20 o 22
+- Git
+- Docker Desktop
 
-1. **Un turno, un estado** — Estados: GENERADO, LLAMADO, ATENDIENDO, FINALIZADO, AUSENTE, CANCELADO
-2. **Una ventanilla, un turno activo** — No permite múltiples turnos simultáneos
-3. **Bloqueo transaccional** — `SELECT FOR UPDATE SKIP LOCKED` al tomar siguiente turno
-4. **Persistencia** — Estado conservado en PostgreSQL ante cierres inesperados
-5. **Historial permanente** — Sin eliminación de registros
-6. **Auditoría completa** — Usuario, acción, fecha, ventanilla, IP
-7. **Máximo 3 llamados** — Luego permite marcar ausente
-8. **Asignación automática** — Solo botón "Tomar siguiente"
-9. **Tiempo real** — Socket.IO en TV, admin, ventanilla y filtro
+### 1. Clonar desde GitHub
 
-## Motor de asignación
+```cmd
+cd C:\Apps
+git clone https://github.com/TU-USUARIO/turnos-dispensario.git
+cd turnos-dispensario
+```
 
-Cada ventanilla atiende las prioridades configuradas. Al presionar "Tomar siguiente", el sistema busca el turno más antiguo en estado GENERADO, respetando el orden de prioridad (nivel 1 primero).
+### 2. Verificar puertos libres
 
-## Exportación
+Ejecutar: `deploy\windows\4-verificar-puertos.bat`
 
-Desde el panel administrador:
+### 3. Instalar (una sola vez)
 
-- **Excel** — Detalle completo de atención
-- **PDF** — Resumen ejecutivo con totales y ranking
+Ejecutar: `deploy\windows\1-instalar.bat`
+
+Crea `backend\.env` automáticamente desde `deploy\windows\.env.example` con JWT y base de datos ya configurados.
+
+### 4. Iniciar
+
+Ejecutar: `deploy\windows\2-iniciar.bat`
+
+### 5. URLs
+
+| Módulo | URL |
+|--------|-----|
+| Login | http://localhost:8741 |
+| Admin | http://localhost:8741/admin |
+| Filtro | http://localhost:8741/filtro |
+| Ventanilla | http://localhost:8741/ventanilla |
+| TV | http://localhost:8741/tv |
+
+Desde otros PCs en la red: `http://IP-DEL-SERVIDOR:8741/tv`
+
+### 6. Detener base de datos
+
+Ejecutar: `deploy\windows\3-detener.bat`
+
+### Actualizar en el servidor
+
+```cmd
+cd C:\Apps\turnos-dispensario
+git pull
+npm install
+npm run db:deploy
+deploy\windows\2-iniciar.bat
+```
+
+---
+
+## Reglas de negocio
+
+1. **Un turno, un estado** — GENERADO, LLAMADO, ATENDIENDO, FINALIZADO, AUSENTE, CANCELADO
+2. **Una ventanilla, un turno activo**
+3. **Bloqueo transaccional** — `SELECT FOR UPDATE SKIP LOCKED`
+4. **Persistencia** en PostgreSQL
+5. **Auditoría completa**
+6. **Máximo 3 llamados** por turno
+7. **Tiempo real** con Socket.IO
 
 ## Estructura del proyecto
 
 ```
 turnos-dispensario/
-├── backend/          # API Express + Socket.IO + Prisma
-├── frontend/         # React + Vite + Tailwind
+├── backend/           # API Express + Socket.IO + Prisma
+├── frontend/          # React + Vite + Tailwind
+├── deploy/windows/    # Scripts de instalación Windows
 ├── docker-compose.yml
 └── README.md
 ```
