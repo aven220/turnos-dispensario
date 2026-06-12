@@ -110,18 +110,18 @@ async function main() {
   ]);
 
   await prisma.windowOperator.upsert({
-    where: { windowId_userId: { windowId: windows[0].id, userId: maria.id } },
-    update: {},
+    where: { userId: maria.id },
+    update: { windowId: windows[0].id },
     create: { windowId: windows[0].id, userId: maria.id },
   });
   await prisma.windowOperator.upsert({
-    where: { windowId_userId: { windowId: windows[1].id, userId: juan.id } },
-    update: {},
+    where: { userId: juan.id },
+    update: { windowId: windows[1].id },
     create: { windowId: windows[1].id, userId: juan.id },
   });
   await prisma.windowOperator.upsert({
-    where: { windowId_userId: { windowId: windows[2].id, userId: carlos.id } },
-    update: {},
+    where: { userId: carlos.id },
+    update: { windowId: windows[2].id },
     create: { windowId: windows[2].id, userId: carlos.id },
   });
 
