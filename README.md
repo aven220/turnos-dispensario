@@ -15,23 +15,38 @@ Aplicación web en tiempo real para gestión de turnos en dispensarios, centros 
 
 - **Frontend:** React 19, Vite, Tailwind CSS 4, Socket.IO Client
 - **Backend:** Node.js, Express 5, Socket.IO, Prisma
-- **Base de datos:** PostgreSQL (Docker)
+- **Base de datos:** PostgreSQL en **[Neon](https://neon.tech)** (plan gratuito, sin tarjeta)
 - **Autenticación:** JWT
+
+---
+
+## Base de datos gratuita (Neon)
+
+No se usa Docker ni servicios de pago. La base de datos vive en **Neon**, con plan free:
+
+- Sin tarjeta de crédito
+- Sin cobros por uso normal del dispensario
+- Los datos persisten en la nube aunque apague el servidor Windows
+
+### Crear la base de datos (5 minutos)
+
+1. Entre a **https://neon.tech** y cree cuenta gratuita.
+2. **New Project** → nombre: `turnos-dispensario` → región la más cercana.
+3. En el panel, copie **Connection string** (pestaña *Connection details*, tipo PostgreSQL).
+4. Pegue esa URL en `backend/.env` como `DATABASE_URL`.
+5. Asegúrese de que termine con `?sslmode=require`. Ejemplo:
+
+```
+DATABASE_URL="postgresql://usuario:clave@ep-xxxx.us-east-2.aws.neon.tech/turnos_dispensario?sslmode=require"
+```
+
+> **Alternativa gratuita:** [Supabase](https://supabase.com) también ofrece PostgreSQL gratis. Use su *Connection string* de la misma forma.
 
 ---
 
 ## Credenciales del sistema
 
-> Guarde este bloque. Si el repositorio es público, cambie todas las contraseñas antes de desplegar.
-
-### Base de datos PostgreSQL
-
-| Campo | Valor |
-|-------|-------|
-| Usuario | `turnos` |
-| Contraseña | `TdCencoic2026Disp` |
-| Base de datos | `turnos_dispensario` |
-| Puerto (local) | `5544` (solo `127.0.0.1`) |
+> Guarde este bloque. Si el repositorio es público, cambie las contraseñas de la aplicación.
 
 ### JWT (backend)
 
@@ -49,12 +64,12 @@ JWT_SECRET=cencoic-turnos-jwt-2026-k8mP2xQ9vL4nR7wZ6sH3fA1bN5jD0eU
 | juan | `CencoicVent2026` | Ventanilla 2 |
 | carlos | `CencoicVent2026` | Ventanilla 3 |
 
-### Puertos
+### Puertos en el servidor Windows
 
-| Entorno | Aplicación | PostgreSQL |
-|---------|------------|------------|
-| Desarrollo (Mac/local) | Frontend `5173` + Backend `4000` | `5544` |
-| Producción (Windows) | **Un solo puerto `8741`** | `5544` |
+| Servicio | Puerto |
+|----------|--------|
+| Aplicación (web + API + TV) | **8741** |
+| Base de datos | En la nube (Neon), sin puerto local |
 
 ---
 
@@ -66,29 +81,28 @@ git remote add origin https://github.com/TU-USUARIO/turnos-dispensario.git
 git push -u origin main
 ```
 
-Reemplace `TU-USUARIO` por su cuenta de GitHub. El archivo `backend/.env` **no** se sube (está en `.gitignore`). La plantilla con valores listos está en `deploy/windows/.env.example`.
+El archivo `backend/.env` **no** se sube. La plantilla está en `deploy/windows/.env.example`.
 
 ---
 
 ## Desarrollo local (Mac / Linux)
 
-### 1. Base de datos
+### 1. Base de datos en Neon
 
-```bash
-docker compose up -d
-```
+Cree el proyecto en https://neon.tech y copie la connection string.
 
 ### 2. Configuración
 
 ```bash
 cp backend/.env.example backend/.env
+# Edite backend/.env y pegue su DATABASE_URL de Neon
 ```
 
 ### 3. Instalar y migrar
 
 ```bash
 npm install
-npm run db:migrate
+npm run db:deploy
 npm run db:seed
 ```
 
@@ -102,6 +116,20 @@ npm run dev
 - Backend: http://localhost:4000
 - Pantalla TV: http://localhost:5173/tv
 
+### PostgreSQL local (opcional, solo desarrollo)
+
+Si prefiere base de datos local sin internet:
+
+```bash
+docker compose up -d
+```
+
+Y en `backend/.env`:
+
+```
+DATABASE_URL="postgresql://turnos:TdCencoic2026Disp@127.0.0.1:5544/turnos_dispensario?schema=public"
+```
+
 ---
 
 ## Producción en Windows Server
@@ -110,7 +138,8 @@ npm run dev
 
 - Node.js LTS 20 o 22
 - Git
-- Docker Desktop
+- Cuenta gratuita en Neon (https://neon.tech)
+- **No requiere Docker**
 
 ### 1. Clonar desde GitHub
 
@@ -120,21 +149,25 @@ git clone https://github.com/TU-USUARIO/turnos-dispensario.git
 cd turnos-dispensario
 ```
 
-### 2. Verificar puertos libres
+### 2. Crear base de datos en Neon
+
+Siga los pasos de la sección **Base de datos gratuita (Neon)** arriba.
+
+### 3. Verificar puerto libre
 
 Ejecutar: `deploy\windows\4-verificar-puertos.bat`
 
-### 3. Instalar (una sola vez)
+### 4. Instalar (una sola vez)
 
 Ejecutar: `deploy\windows\1-instalar.bat`
 
-Crea `backend\.env` automáticamente desde `deploy\windows\.env.example` con JWT y base de datos ya configurados.
+El script abre `backend\.env` para pegar la URL de Neon, luego aplica migraciones y crea usuarios.
 
-### 4. Iniciar
+### 5. Iniciar
 
 Ejecutar: `deploy\windows\2-iniciar.bat`
 
-### 5. URLs
+### 6. URLs
 
 | Módulo | URL |
 |--------|-----|
@@ -145,10 +178,6 @@ Ejecutar: `deploy\windows\2-iniciar.bat`
 | TV | http://localhost:8741/tv |
 
 Desde otros PCs en la red: `http://IP-DEL-SERVIDOR:8741/tv`
-
-### 6. Detener base de datos
-
-Ejecutar: `deploy\windows\3-detener.bat`
 
 ### Actualizar en el servidor
 
@@ -167,7 +196,7 @@ deploy\windows\2-iniciar.bat
 1. **Un turno, un estado** — GENERADO, LLAMADO, ATENDIENDO, FINALIZADO, AUSENTE, CANCELADO
 2. **Una ventanilla, un turno activo**
 3. **Bloqueo transaccional** — `SELECT FOR UPDATE SKIP LOCKED`
-4. **Persistencia** en PostgreSQL
+4. **Persistencia** en PostgreSQL (Neon)
 5. **Auditoría completa**
 6. **Máximo 3 llamados** por turno
 7. **Tiempo real** con Socket.IO
@@ -179,6 +208,6 @@ turnos-dispensario/
 ├── backend/           # API Express + Socket.IO + Prisma
 ├── frontend/          # React + Vite + Tailwind
 ├── deploy/windows/    # Scripts de instalación Windows
-├── docker-compose.yml
+├── docker-compose.yml # Opcional, solo dev local
 └── README.md
 ```

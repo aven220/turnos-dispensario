@@ -11,12 +11,12 @@ if not exist "backend\.env" (
   exit /b 1
 )
 
-echo Verificando PostgreSQL...
-docker compose ps | findstr /I "running" >nul 2>&1
-if errorlevel 1 (
-  echo Iniciando PostgreSQL...
-  docker compose up -d
-  timeout /t 8 /nobreak >nul
+findstr /C:"PEGUE_AQUI" "backend\.env" >nul 2>&1
+if not errorlevel 1 (
+  echo [ERROR] Configure DATABASE_URL en backend\.env con su URL de Neon
+  echo Vea instrucciones en README.md
+  pause
+  exit /b 1
 )
 
 set NODE_ENV=production
@@ -25,6 +25,7 @@ echo.
 echo ============================================
 echo   Turnos Dispensario en ejecucion
 echo ============================================
+echo   Base de datos: Neon ^(nube gratuita^)
 echo   En este equipo:  http://localhost:8741
 echo   Pantalla TV:     http://localhost:8741/tv
 echo   Admin:           http://localhost:8741/admin
