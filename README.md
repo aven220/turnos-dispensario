@@ -1,144 +1,60 @@
 # Sistema Web de Gestión Inteligente de Turnos para Dispensarios
 
-Aplicación web en tiempo real para gestión de turnos en dispensarios, centros médicos y puntos de atención.
+Aplicación web en tiempo real para gestión de turnos en dispensarios y puntos de atención.
 
-## Módulos
+## Accesos del sistema
 
-| Módulo | Ruta | Rol |
-|--------|------|-----|
-| Panel Administrador | `/admin` | ADMIN |
-| Módulo Filtro | `/filtro` | FILTER |
-| Módulo Ventanilla | `/ventanilla` | WINDOW |
-| Pantalla TV | `/tv` | Público |
+| Módulo | Ruta | Quién entra |
+|--------|------|-------------|
+| Login | `/` | Todos los operadores |
+| Administrador | `/admin` | Usuario `admin` |
+| Filtro | `/filtro` | Usuario `filtro` |
+| Ventanilla | `/ventanilla` | Operadores de ventanilla |
+| **Pantalla TV** | `/tv` | **Solo abrir directo en el navegador de la TV** (no aparece en login) |
 
-## Stack
-
-- **Frontend:** React 19, Vite, Tailwind CSS 4, Socket.IO Client
-- **Backend:** Node.js, Express 5, Socket.IO, Prisma
-- **Base de datos:** PostgreSQL **local** (gratis, sin suscripciones)
-- **Autenticación:** JWT
+> La pantalla TV no requiere usuario. En el panel admin hay un enlace **TV** para abrirla en otra pestaña al configurarla.
 
 ---
 
-## ¿Se puede usar XAMPP?
+## Configuración rápida (`backend/.env`)
 
-**No directamente.** XAMPP trae **MySQL/MariaDB**, pero este proyecto usa **PostgreSQL**. Son motores distintos; usar XAMPP implicaría reescribir toda la base de datos.
+Copie la plantilla según su entorno:
 
-### Opciones locales gratuitas (recomendadas)
+| Archivo plantilla | Uso |
+|-------------------|-----|
+| `backend/.env.example` | Desarrollo local |
+| `deploy/windows/.env.example` | Servidor Windows |
+| `deploy/linux/.env.example` | Servidor Linux |
 
-| Opción | Dificultad | ¿Funciona? | Suscripciones |
-|--------|------------|------------|---------------|
-| **Docker + PostgreSQL** | Fácil | Sí | Ninguna |
-| **PostgreSQL en Windows** | Media | Sí | Ninguna |
-| XAMPP (MySQL) | — | No | — |
-| Neon (nube) | Fácil | Sí (opcional) | Plan free |
+Variables importantes:
 
-**Recomendación:** use **Docker Desktop** (opción más simple) o **PostgreSQL instalado en Windows** si no quiere Docker. Ambas son 100 % locales y gratuitas.
-
----
-
-## Base de datos local (recomendado)
-
-### Opción A — Docker (más fácil)
-
-1. Instale [Docker Desktop](https://www.docker.com/products/docker-desktop/) (gratis).
-2. En la carpeta del proyecto:
-
-```cmd
-docker compose up -d
-```
-
-PostgreSQL queda en `127.0.0.1:5544` — solo este equipo, no interfiere con otros programas.
-
-### Opción B — PostgreSQL en Windows (sin Docker)
-
-1. Descargue el instalador: https://www.postgresql.org/download/windows/
-2. Durante la instalación:
-   - Puerto: **5544** (poco usado, evita conflictos)
-   - Contraseña del superusuario: anótela
-3. Abra **pgAdmin** o **SQL Shell (psql)** y ejecute:
-
-```sql
-CREATE USER turnos WITH PASSWORD 'TdCencoic2026Disp';
-CREATE DATABASE turnos_dispensario OWNER turnos;
-GRANT ALL PRIVILEGES ON DATABASE turnos_dispensario TO turnos;
-```
-
-4. En `backend/.env`:
-
-```
-DATABASE_URL="postgresql://turnos:TdCencoic2026Disp@127.0.0.1:5544/turnos_dispensario?schema=public"
-```
-
-### Opción C — Nube gratis (opcional, si no quiere nada local)
-
-[Neon](https://neon.tech) ofrece PostgreSQL gratis (sin tarjeta). Pegue la connection string en `DATABASE_URL` con `?sslmode=require` al final.
+| Variable | Descripción | Producción recomendada |
+|----------|-------------|------------------------|
+| `DATABASE_URL` | Conexión PostgreSQL | `postgresql://turnos:...@127.0.0.1:5544/turnos_dispensario` |
+| `JWT_SECRET` | Clave de sesiones | Cadena larga y única |
+| `PORT` | Puerto único (web + API + sockets) | `8741` |
+| `HOST` | Interfaz de red | `0.0.0.0` (acceso en red local) |
+| `CORS_ORIGIN` | Orígenes permitidos | `*` (otros PCs en la red) |
+| `NODE_ENV` | Entorno | `production` en servidor |
 
 ---
 
-## Credenciales del sistema
-
-> Guarde este bloque. Si el repositorio es público, cambie las contraseñas de la aplicación.
-
-### JWT (backend)
-
-```
-JWT_SECRET=cencoic-turnos-jwt-2026-k8mP2xQ9vL4nR7wZ6sH3fA1bN5jD0eU
-```
-
-### Usuarios de la aplicación
+## Credenciales por defecto (cámbielas en producción)
 
 | Usuario | Contraseña | Rol |
 |---------|------------|-----|
 | admin | `CencoicAdmin2026` | Administrador |
 | filtro | `CencoicFiltro2026` | Filtro |
-| maria | `CencoicVent2026` | Ventanilla 1 |
-| juan | `CencoicVent2026` | Ventanilla 2 |
-| carlos | `CencoicVent2026` | Ventanilla 3 |
+| maria / juan / carlos | `CencoicVent2026` | Ventanilla |
 
-### Puertos en el servidor Windows
-
-| Servicio | Puerto |
-|----------|--------|
-| Aplicación (web + API + TV) | **8741** |
-| PostgreSQL local | **5544** (solo `127.0.0.1`) |
-
-### PostgreSQL local (Docker o instalado)
+PostgreSQL local (Docker):
 
 | Campo | Valor |
 |-------|-------|
 | Usuario | `turnos` |
 | Contraseña | `TdCencoic2026Disp` |
 | Base de datos | `turnos_dispensario` |
-
----
-
-## Subir a GitHub
-
-```bash
-cd turnos-dispensario
-git remote add origin https://github.com/TU-USUARIO/turnos-dispensario.git
-git push -u origin main
-```
-
-El archivo `backend/.env` **no** se sube. La plantilla está en `deploy/windows/.env.example`.
-
----
-
-## Desarrollo local (Mac / Linux)
-
-```bash
-docker compose up -d
-cp backend/.env.example backend/.env
-npm install
-npm run db:deploy
-npm run db:seed
-npm run dev
-```
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:4000
-- Pantalla TV: http://localhost:5173/tv
+| Puerto | `5544` (solo localhost) |
 
 ---
 
@@ -146,11 +62,11 @@ npm run dev
 
 ### Requisitos
 
-- Node.js LTS 20 o 22
-- Git
-- **Docker Desktop** (recomendado) o **PostgreSQL para Windows**
+- Windows Server 2019+ o Windows 10/11
+- [Node.js LTS 20 o 22](https://nodejs.org/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recomendado) **o** PostgreSQL instalado
 
-### 1. Clonar desde GitHub
+### Paso 1 — Clonar el proyecto
 
 ```cmd
 cd C:\Apps
@@ -158,36 +74,63 @@ git clone https://github.com/TU-USUARIO/turnos-dispensario.git
 cd turnos-dispensario
 ```
 
-### 2. Verificar puerto libre
+### Paso 2 — Verificar puerto libre
 
-Ejecutar: `deploy\windows\4-verificar-puertos.bat`
+```cmd
+deploy\windows\4-verificar-puertos.bat
+```
 
-### 3. Instalar (una sola vez)
+El puerto **8741** debe estar libre.
 
-Ejecutar: `deploy\windows\1-instalar.bat`
+### Paso 3 — Instalar (una sola vez)
 
-Si tiene Docker, levanta PostgreSQL local automáticamente. Si no, siga **Opción B** de base de datos local arriba.
+```cmd
+deploy\windows\1-instalar.bat
+```
 
-### 4. Iniciar
+Este script:
 
-Ejecutar: `deploy\windows\2-iniciar.bat`
+1. Instala dependencias npm
+2. Crea `backend\.env` desde la plantilla
+3. Levanta PostgreSQL en Docker (puerto 5544)
+4. Aplica migraciones de base de datos
+5. Carga usuarios y datos iniciales
 
-### 5. URLs
+### Paso 4 — Iniciar la aplicación
 
-| Módulo | URL |
-|--------|-----|
+```cmd
+deploy\windows\2-iniciar.bat
+```
+
+### Paso 5 — Probar
+
+| Qué | URL |
+|-----|-----|
 | Login | http://localhost:8741 |
-| Admin | http://localhost:8741/admin |
-| Filtro | http://localhost:8741/filtro |
-| Ventanilla | http://localhost:8741/ventanilla |
-| TV | http://localhost:8741/tv |
+| Salud del sistema | http://localhost:8741/api/health |
+| Pantalla TV | http://localhost:8741/tv |
+| Desde otro PC en la red | http://IP-DEL-SERVidor:8741 |
 
-Desde otros PCs en la red: `http://IP-DEL-SERVIDOR:8741/tv`
+Respuesta correcta de salud:
 
-### Actualizar en el servidor
+```json
+{ "status": "ok", "db": "connected", "uptimeSeconds": 120 }
+```
+
+### Paso 6 — Arranque automático al encender el servidor (opcional)
+
+1. Abra **Programador de tareas** de Windows
+2. Crear tarea básica → Al iniciar el equipo
+3. Acción: Iniciar programa → `C:\Apps\turnos-dispensario\deploy\windows\2-iniciar.bat`
+4. Marque **Ejecutar con los privilegios más altos** si Docker lo requiere
+
+> Docker Desktop debe configurarse para iniciar con Windows.
+
+### Actualizar versión en el servidor
 
 ```cmd
 cd C:\Apps\turnos-dispensario
+deploy\windows\3-detener.bat
 git pull
 npm install
 npm run db:deploy
@@ -196,23 +139,159 @@ deploy\windows\2-iniciar.bat
 
 ---
 
-## Reglas de negocio
+## Producción en Linux (Ubuntu / Debian)
 
-1. **Un turno, un estado** — GENERADO, LLAMADO, ATENDIENDO, FINALIZADO, AUSENTE, CANCELADO
-2. **Una ventanilla, un turno activo**
-3. **Bloqueo transaccional** — `SELECT FOR UPDATE SKIP LOCKED`
-4. **Persistencia** en PostgreSQL (Neon)
-5. **Auditoría completa**
-6. **Máximo 3 llamados** por turno
-7. **Tiempo real** con Socket.IO
+### Requisitos
+
+- Node.js 20 LTS
+- Docker (recomendado) o PostgreSQL 16
+- Git
+
+### Instalación
+
+```bash
+cd /opt
+sudo git clone https://github.com/TU-USUARIO/turnos-dispensario.git
+cd turnos-dispensario
+sudo chown -R $USER:$USER .
+
+chmod +x deploy/linux/*.sh
+./deploy/linux/install.sh
+```
+
+### Iniciar manualmente
+
+```bash
+./deploy/linux/start.sh
+```
+
+### Iniciar con PM2 (recomendado — se reinicia solo si falla)
+
+```bash
+./deploy/linux/start-pm2.sh
+pm2 startup    # seguir instrucciones para arranque al boot
+pm2 save
+```
+
+### Servicio systemd (alternativa)
+
+```bash
+sudo cp deploy/linux/turnos-dispensario.service /etc/systemd/system/
+# Edite User= y rutas si no usa /opt/turnos-dispensario
+sudo systemctl daemon-reload
+sudo systemctl enable turnos-dispensario
+sudo systemctl start turnos-dispensario
+sudo systemctl status turnos-dispensario
+```
+
+### Firewall (acceso desde la red)
+
+```bash
+sudo ufw allow 8741/tcp
+```
+
+---
+
+## Desarrollo local (Mac / Linux / Windows)
+
+```bash
+docker compose up -d --wait
+cp backend/.env.example backend/.env
+npm install
+npm run db:deploy
+npm run db:seed
+npm run dev
+```
+
+| Servicio | URL |
+|----------|-----|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:4000 |
+| TV (dev) | http://localhost:5173/tv |
+
+---
+
+## Base de datos
+
+### Docker (recomendado)
+
+```bash
+docker compose up -d --wait
+```
+
+- Contenedor: `turnos-postgres`
+- Reinicio automático: `unless-stopped`
+- Datos persistentes en volumen `turnos_pg_data`
+- Healthcheck integrado
+
+### Sin Docker (PostgreSQL instalado)
+
+Cree usuario y base de datos, luego ajuste `DATABASE_URL` en `backend/.env`. Ver sección en versiones anteriores del README o documentación de PostgreSQL.
+
+### XAMPP
+
+**No compatible.** XAMPP usa MySQL; este proyecto requiere **PostgreSQL**.
+
+---
+
+## Robustez y operación diaria
+
+El sistema incluye:
+
+- **Reintento de conexión a BD** al arrancar (hasta 30 s)
+- **Health check** en `/api/health` (verifica base de datos)
+- **Reinicio diario automático** de turnos del día anterior (cada hora y en cada operación)
+- **Reconexión Socket.IO** en el navegador si se pierde la red
+- **CORS flexible** (`CORS_ORIGIN=*`) para TVs y PCs en la red local
+- **Cierre ordenado** del servidor (SIGINT / SIGTERM)
+- **Docker** con `restart: unless-stopped` y healthcheck
+
+### Si algo deja de funcionar
+
+1. Verifique salud: `http://SU-SERVIDOR:8741/api/health`
+2. Si `db: disconnected`:
+   ```bash
+   docker compose up -d --wait
+   ```
+3. Reinicie la aplicación (`2-iniciar.bat` o `pm2 restart turnos-dispensario`)
+4. Revise que `JWT_SECRET` y `DATABASE_URL` no hayan cambiado sin reiniciar sesiones en el navegador
+
+### Pantalla TV
+
+- Abra **solo** `http://IP-SERVIDOR:8741/tv` en el navegador de la TV
+- Use modo pantalla completa (F11)
+- No cierre esa pestaña; el sistema reconecta solo si hay un corte breve de red
+
+---
 
 ## Estructura del proyecto
 
 ```
 turnos-dispensario/
-├── backend/           # API Express + Socket.IO + Prisma
-├── frontend/          # React + Vite + Tailwind
-├── deploy/windows/    # Scripts de instalación Windows
-├── docker-compose.yml # PostgreSQL local (gratis)
+├── backend/              API Express + Socket.IO + Prisma
+├── frontend/             React + Vite + Tailwind
+├── deploy/
+│   ├── windows/          Scripts .bat para Windows Server
+│   ├── linux/            Scripts .sh + systemd
+│   └── pm2/              Configuración PM2
+├── docker-compose.yml    PostgreSQL local
 └── README.md
 ```
+
+---
+
+## Reglas de negocio
+
+1. Un turno, un estado — GENERADO → LLAMADO → ATENDIENDO → FINALIZADO / AUSENTE / CANCELADO
+2. Una ventanilla, un turno activo
+3. Asignación transaccional (`SELECT FOR UPDATE SKIP LOCKED`)
+4. Auditoría completa de acciones
+5. Máximo 3 llamados por turno
+6. Tiempo real con Socket.IO
+
+## Stack
+
+- **Frontend:** React 19, Vite, Tailwind CSS 4
+- **Backend:** Node.js, Express 5, Socket.IO, Prisma
+- **Base de datos:** PostgreSQL 16
+- **Autenticación:** JWT

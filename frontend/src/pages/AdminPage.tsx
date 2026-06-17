@@ -51,6 +51,7 @@ export function AdminPage() {
   const [tvError, setTvError] = useState('');
   const [tvSettings, setTvSettings] = useState<TvSettings | null>(null);
   const [upcomingCount, setUpcomingCount] = useState(3);
+  const [windowQueueCount, setWindowQueueCount] = useState(3);
   const [welcomeMessage, setWelcomeMessage] = useState('BIENVENIDOS A CENCOIC');
   const [userError, setUserError] = useState('');
   const [userLoading, setUserLoading] = useState(false);
@@ -59,6 +60,8 @@ export function AdminPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [editingPriority, setEditingPriority] = useState<Priority | null>(null);
   const [priorityError, setPriorityError] = useState('');
+  const [priorityLoading, setPriorityLoading] = useState(false);
+  const [priorityDraft, setPriorityDraft] = useState({ name: '', code: '', sortOrder: '' });
   const [ticketPrintSettings, setTicketPrintSettings] = useState<TicketPrintSettings | null>(null);
   const [ticketPrintDraft, setTicketPrintDraft] = useState<TicketPrintSettings>(DEFAULT_TICKET_PRINT);
   const [ticketPrintError, setTicketPrintError] = useState('');
@@ -88,6 +91,7 @@ export function AdminPage() {
     setTickerMessages(ticker.filter((t) => t.isActive));
     setTvSettings(settings);
     setUpcomingCount(settings.upcomingCount);
+    setWindowQueueCount(settings.windowQueueCount);
     setWelcomeMessage(settings.welcomeMessage);
   }
 
@@ -129,11 +133,16 @@ export function AdminPage() {
     try {
       const settings = await api<TvSettings>('/tv/settings', {
         method: 'PATCH',
-        body: JSON.stringify({ upcomingCount, welcomeMessage: welcomeMessage.trim() }),
+        body: JSON.stringify({
+          upcomingCount,
+          windowQueueCount,
+          welcomeMessage: welcomeMessage.trim(),
+        }),
       });
       setTvSettings(settings);
       setWelcomeMessage(settings.welcomeMessage);
       setUpcomingCount(settings.upcomingCount);
+      setWindowQueueCount(settings.windowQueueCount);
     } catch (err) {
       setTvError(err instanceof Error ? err.message : 'Error al guardar configuración');
     }
@@ -234,20 +243,27 @@ export function AdminPage() {
   async function createPriority(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPriorityError('');
-    const fd = new FormData(e.currentTarget);
+    const sortOrder = parsePrioritySortOrder(priorityDraft.sortOrder);
+    if (sortOrder === null) {
+      setPriorityError('Indique un acomodo válido (1 = se atiende primero)');
+      return;
+    }
+    setPriorityLoading(true);
     try {
       await api('/priorities', {
         method: 'POST',
         body: JSON.stringify({
-          name: String(fd.get('name') ?? '').trim(),
-          code: String(fd.get('code') ?? '').trim().toUpperCase(),
-          sortOrder: Number(fd.get('sortOrder')),
+          name: priorityDraft.name.trim(),
+          code: priorityDraft.code.trim().toUpperCase(),
+          sortOrder,
         }),
       });
-      e.currentTarget.reset();
+      setPriorityDraft({ name: '', code: '', sortOrder: '' });
       loadAll();
     } catch (err) {
       setPriorityError(err instanceof Error ? err.message : 'Error al crear');
+    } finally {
+      setPriorityLoading(false);
     }
   }
 
@@ -255,21 +271,50 @@ export function AdminPage() {
     e.preventDefault();
     if (!editingPriority) return;
     setPriorityError('');
-    const fd = new FormData(e.currentTarget);
+    const sortOrder = parsePrioritySortOrder(priorityDraft.sortOrder);
+    if (sortOrder === null) {
+      setPriorityError('Indique un acomodo válido (1 = se atiende primero)');
+      return;
+    }
+    setPriorityLoading(true);
     try {
       await api(`/priorities/${editingPriority.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          name: String(fd.get('name') ?? '').trim(),
-          code: String(fd.get('code') ?? '').trim().toUpperCase(),
-          sortOrder: Number(fd.get('sortOrder')),
+          name: priorityDraft.name.trim(),
+          code: priorityDraft.code.trim().toUpperCase(),
+          sortOrder,
         }),
       });
-      setEditingPriority(null);
+      cancelEditPriority();
       loadAll();
     } catch (err) {
       setPriorityError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setPriorityLoading(false);
     }
+  }
+
+  function parsePrioritySortOrder(value: string): number | null {
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n) || n < 1) return null;
+    return n;
+  }
+
+  function startEditPriority(priority: Priority) {
+    setEditingPriority(priority);
+    setPriorityError('');
+    setPriorityDraft({
+      name: priority.name,
+      code: priority.code,
+      sortOrder: String(priority.sortOrder),
+    });
+  }
+
+  function cancelEditPriority() {
+    setEditingPriority(null);
+    setPriorityError('');
+    setPriorityDraft({ name: '', code: '', sortOrder: '' });
   }
 
   async function deactivatePriority(priorityId: string) {
@@ -278,6 +323,7 @@ export function AdminPage() {
         method: 'PATCH',
         body: JSON.stringify({ isActive: false }),
       });
+      if (editingPriority?.id === priorityId) cancelEditPriority();
       loadAll();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al desactivar');
@@ -735,27 +781,93 @@ export function AdminPage() {
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold">Editar prioridad</h3>
-                  <button type="button" onClick={() => { setEditingPriority(null); setPriorityError(''); }} className="text-sm text-slate-500 hover:text-slate-700">
+                  <button type="button" onClick={cancelEditPriority} className="text-sm text-slate-500 hover:text-slate-700">
                     Cancelar
                   </button>
                 </div>
-                <form onSubmit={updatePriority} className="space-y-3">
-                  <input name="name" defaultValue={editingPriority.name} placeholder="Nombre" className="w-full border rounded-lg px-3 py-2" required />
-                  <input name="code" defaultValue={editingPriority.code} placeholder="Código (ej: PRI)" maxLength={5} className="w-full border rounded-lg px-3 py-2 uppercase" required />
-                  <input name="sortOrder" type="number" defaultValue={editingPriority.sortOrder} placeholder="Orden (1 = mayor prioridad)" min={1} className="w-full border rounded-lg px-3 py-2" required />
+                <form key={editingPriority.id} onSubmit={updatePriority} className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Nombre</label>
+                    <input
+                      value={priorityDraft.name}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, name: e.target.value }))}
+                      placeholder="Nombre"
+                      className="w-full border rounded-lg px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Código</label>
+                    <input
+                      value={priorityDraft.code}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                      placeholder="Código (ej: PRI)"
+                      maxLength={5}
+                      className="w-full border rounded-lg px-3 py-2 uppercase"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Acomodar</label>
+                    <input
+                      value={priorityDraft.sortOrder}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, sortOrder: e.target.value }))}
+                      type="number"
+                      placeholder="1 = se atiende primero"
+                      min={1}
+                      className="w-full border rounded-lg px-3 py-2"
+                      required
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Define el orden en que se atienden los turnos de esta prioridad.</p>
+                  </div>
                   {priorityError && <p className="text-red-600 text-sm">{priorityError}</p>}
-                  <Button type="submit">Guardar cambios</Button>
+                  <Button type="submit" disabled={priorityLoading}>
+                    {priorityLoading ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
                 </form>
               </>
             ) : (
               <>
                 <h3 className="font-semibold mb-4">Crear prioridad</h3>
                 <form onSubmit={createPriority} className="space-y-3">
-                  <input name="name" placeholder="Nombre" className="w-full border rounded-lg px-3 py-2" required />
-                  <input name="code" placeholder="Código (ej: PRI)" maxLength={5} className="w-full border rounded-lg px-3 py-2 uppercase" required />
-                  <input name="sortOrder" type="number" placeholder="Orden (1 = mayor prioridad)" min={1} className="w-full border rounded-lg px-3 py-2" required />
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Nombre</label>
+                    <input
+                      value={priorityDraft.name}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, name: e.target.value }))}
+                      placeholder="Nombre"
+                      className="w-full border rounded-lg px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Código</label>
+                    <input
+                      value={priorityDraft.code}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
+                      placeholder="Código (ej: PRI)"
+                      maxLength={5}
+                      className="w-full border rounded-lg px-3 py-2 uppercase"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Acomodar</label>
+                    <input
+                      value={priorityDraft.sortOrder}
+                      onChange={(e) => setPriorityDraft((d) => ({ ...d, sortOrder: e.target.value }))}
+                      type="number"
+                      placeholder="1 = se atiende primero"
+                      min={1}
+                      className="w-full border rounded-lg px-3 py-2"
+                      required
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Define el orden en que se atienden los turnos de esta prioridad.</p>
+                  </div>
                   {priorityError && <p className="text-red-600 text-sm">{priorityError}</p>}
-                  <Button type="submit">Crear</Button>
+                  <Button type="submit" disabled={priorityLoading}>
+                    {priorityLoading ? 'Creando...' : 'Crear'}
+                  </Button>
                 </form>
               </>
             )}
@@ -767,11 +879,11 @@ export function AdminPage() {
                 <div key={p.id} className={`flex justify-between items-center p-3 rounded-lg ${editingPriority?.id === p.id ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
                   <div>
                     <span className="font-medium">{p.name}</span>
-                    <span className="text-sm text-slate-500 ml-2">{p.code} · Nivel {p.sortOrder}</span>
+                    <span className="text-sm text-slate-500 ml-2">{p.code} · Acomodo {p.sortOrder}</span>
                     {p.isActive === false && <span className="text-xs text-red-500 ml-2">Inactiva</span>}
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="secondary" onClick={() => { setEditingPriority(p); setPriorityError(''); }}>Editar</Button>
+                    <Button variant="secondary" onClick={() => startEditPriority(p)}>Editar</Button>
                     {p.isActive === false ? (
                       <Button variant="success" onClick={() => reactivatePriority(p.id)}>Reactivar</Button>
                     ) : (
@@ -804,7 +916,7 @@ export function AdminPage() {
               </div>
               <div className="flex flex-wrap items-end gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Próximos turnos a mostrar</label>
+                  <label className="block text-sm font-medium mb-1">Próximos turnos en TV</label>
                   <input
                     type="number"
                     min={0}
@@ -814,12 +926,24 @@ export function AdminPage() {
                     className="w-24 border rounded-lg px-3 py-2"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Cola visible en ventanilla</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={windowQueueCount}
+                    onChange={(e) => setWindowQueueCount(Math.min(10, Math.max(0, Number(e.target.value) || 0)))}
+                    className="w-24 border rounded-lg px-3 py-2"
+                  />
+                </div>
                 <span className="text-xs text-slate-400 pb-2">0 = ocultar · máximo 10</span>
               </div>
               <Button
                 onClick={saveTvSettings}
                 disabled={
                   tvSettings?.upcomingCount === upcomingCount &&
+                  tvSettings?.windowQueueCount === windowQueueCount &&
                   tvSettings?.welcomeMessage === welcomeMessage.trim()
                 }
               >

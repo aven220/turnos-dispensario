@@ -1,11 +1,3 @@
-const PRIORITY_NAMES: Record<string, string> = {
-  PRI: 'prioritario',
-  PEN: 'pendiente',
-  GEN: 'general',
-  AM: 'adulto mayor',
-  ENT: 'entrega',
-};
-
 function numberToSpanish(num: number): string {
   const units = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
   const teens = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
@@ -21,24 +13,26 @@ function numberToSpanish(num: number): string {
   return String(num);
 }
 
-export function buildCallMessage(
-  displayCode: string,
-  priorityCode: string,
-  windowNumber: number,
-  callCount: number,
-  priorityLabel?: string
-): string {
-  const match = displayCode.match(/(\d+)$/);
-  const num = match ? parseInt(match[1], 10) : 0;
-  const priorityName = priorityLabel?.toLowerCase() ?? PRIORITY_NAMES[priorityCode] ?? priorityCode.toLowerCase();
-  const numText = numberToSpanish(num);
+/** Convierte AM001 → "A M cero cero uno" para que el TTS lea el código del turno. */
+function displayCodeToSpeech(displayCode: string): string {
+  const match = displayCode.match(/^([A-Za-z]+)(\d+)$/);
+  if (!match) return displayCode;
+
+  const letters = match[1].toUpperCase().split('').join(' ');
+  const digits = match[2].split('').map((d) => numberToSpanish(parseInt(d, 10))).join(' ');
+  return `${letters} ${digits}`;
+}
+
+export function buildCallMessage(displayCode: string, windowNumber: number, callCount: number): string {
+  const ticketSpeech = displayCodeToSpeech(displayCode);
+  const windowSpeech = numberToSpanish(windowNumber);
 
   if (callCount > 1) {
     const ordinals = ['', 'Primera', 'Segunda', 'Tercera'];
-    return `${ordinals[callCount]} llamada para el turno ${priorityName} ${numText}, diríjase a la ventanilla ${numberToSpanish(windowNumber)}.`;
+    return `${ordinals[callCount]} llamada para el turno ${ticketSpeech}, diríjase a la ventanilla ${windowSpeech}.`;
   }
 
-  return `Turno ${priorityName} ${numText}, diríjase a la ventanilla ${numberToSpanish(windowNumber)}.`;
+  return `Turno ${ticketSpeech}, diríjase a la ventanilla ${windowSpeech}.`;
 }
 
 const queue: string[] = [];

@@ -7,10 +7,12 @@
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "start:server": "npm run start --workspace=backend",
     "start:prod": "npm run build && npm run start --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "db:deploy": "npm run db:deploy --workspace=backend",
-    "db:seed": "npm run db:seed --workspace=backend"
+    "db:seed": "npm run db:seed --workspace=backend",
+    "health": "node -e \"fetch('http://localhost:'+(process.env.PORT||8741)+'/api/health').then(r=>r.json()).then(console.log).catch(console.error)\""
   },
   "workspaces": [
     "backend",

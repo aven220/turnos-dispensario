@@ -14,7 +14,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
       const field = (err.meta?.target as string[] | undefined)?.[0] ?? 'campo';
-      const labels: Record<string, string> = { username: 'nombre de usuario', email: 'correo' };
+      const labels: Record<string, string> = { username: 'nombre de usuario', code: 'código' };
       res.status(400).json({ error: `El ${labels[field] ?? field} ya está en uso` });
       return;
     }

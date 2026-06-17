@@ -16,15 +16,15 @@ const router = Router();
 router.get('/display', async (_req, res) => {
   await ensureDailyOperations();
   const settings = await getTvSettings();
-  const [currentCall, attending, media, ticker, upcoming] = await Promise.all([
-    ticketService.getCurrentCall(),
+  const [pendingCalls, attending, media, ticker, upcoming] = await Promise.all([
+    ticketService.getPendingCalls(),
     ticketService.getAttendingTickets(),
     prisma.tvMedia.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
     prisma.tickerMessage.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
     ticketService.getUpcomingTickets(settings.upcomingCount),
   ]);
 
-  res.json({ currentCall, attending, media, ticker, upcoming, settings });
+  res.json({ pendingCalls, attending, media, ticker, upcoming, settings });
 });
 
 router.use(authMiddleware, requireRoles(UserRole.ADMIN));
@@ -39,6 +39,7 @@ router.patch('/settings', async (req, res, next) => {
     const body = z
       .object({
         upcomingCount: z.number().int().min(0).max(10).optional(),
+        windowQueueCount: z.number().int().min(0).max(10).optional(),
         welcomeMessage: z.string().min(1).max(120).optional(),
       })
       .parse({
@@ -46,11 +47,11 @@ router.patch('/settings', async (req, res, next) => {
         welcomeMessage: typeof req.body.welcomeMessage === 'string' ? req.body.welcomeMessage.trim() : req.body.welcomeMessage,
       });
     const settings = await updateTvSettings(body);
-    getIO().to('tv').emit('tv:settings-updated');
+    getIO().to('tv').to('windows').emit('tv:settings-updated');
     await logAudit({
       userId: req.user!.sub,
       action: 'TV_CONFIG_ACTUALIZADA',
-      details: `Próximos turnos: ${upcomingCount}`,
+      details: `TV próximos: ${settings.upcomingCount} · Ventanilla cola: ${settings.windowQueueCount}`,
       ipAddress: getClientIp(req),
     });
     res.json(settings);

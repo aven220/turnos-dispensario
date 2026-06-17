@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 const prioritySchema = z.object({
   name: z.string().min(1),
   code: z.string().min(2).max(5),
-  sortOrder: z.number().int().positive(),
+  sortOrder: z.coerce.number().int().positive('El acomodo debe ser 1 o mayor'),
 });
 
 router.post('/', requireRoles(UserRole.ADMIN), async (req, res, next) => {

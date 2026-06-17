@@ -34,13 +34,15 @@ where docker >nul 2>&1
 if not errorlevel 1 (
   set USE_DOCKER=1
   echo [3/6] Docker detectado. Iniciando PostgreSQL local ^(puerto 5544^)...
-  docker compose up -d
+  docker compose up -d --wait
   if errorlevel 1 (
-    set USE_DOCKER=0
-    echo [AVISO] Docker fallo. Intentara usar PostgreSQL instalado en Windows.
-  ) else (
+    docker compose up -d
+    set USE_DOCKER=1
     echo [4/6] Esperando que PostgreSQL este listo...
     timeout /t 12 /nobreak >nul
+  ) else (
+    set USE_DOCKER=1
+    echo [4/6] PostgreSQL listo.
   )
 )
 

@@ -1,25 +1,134 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTurnoActualHighlight } from '../hooks/useTurnoActualHighlight';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
+import type { Ticket, TvDisplay } from '../types';
 import { buildCallMessage, enqueueCallSpeech, initSpeech } from '../utils/speech';
 import { isYoutubeUrl, youtubeEmbedUrl } from '../utils/media';
-import type { Ticket, TvDisplay } from '../types';
+import { removePendingCall, sortPendingCalls, upsertPendingCall } from '../utils/tvCalls';
 
 function announceTicket(ticket: Ticket) {
   if (!ticket.window) return;
   const key = `${ticket.id}-${ticket.callCount}`;
-  const msg = buildCallMessage(ticket.displayCode, ticket.priority.code, ticket.window.number, ticket.callCount, ticket.priority.name);
+  const msg = buildCallMessage(ticket.displayCode, ticket.window.number, ticket.callCount);
   enqueueCallSpeech(key, msg);
+}
+
+function RecentCallRow({ ticket }: { ticket: Ticket }) {
+  return (
+    <div className="flex items-center justify-between gap-3 sm:gap-4 bg-slate-800/60 border border-slate-600 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 min-w-0">
+      <p className="font-black text-yellow-300 shrink-0 text-[clamp(1rem,4vmin,1.5rem)]">{ticket.displayCode}</p>
+      <p className="text-emerald-400 font-semibold text-[clamp(0.8rem,2.5vmin,1rem)] truncate">
+        Ventanilla {ticket.window?.number}
+      </p>
+    </div>
+  );
+}
+
+function getOperatorName(ticket: Ticket): string | null {
+  return ticket.window?.sessions?.[0]?.user.fullName ?? null;
+}
+
+/** Escala estándar (1) con 1 ventanilla; baja gradualmente hasta ~0.72 con 9. */
+function getAttendingScale(count: number): number {
+  if (count <= 1) return 1;
+  return Math.max(0.72, 1 - (count - 1) * 0.035);
+}
+
+function AttendingSection({ tickets }: { tickets: Ticket[] }) {
+  const scale = getAttendingScale(tickets.length);
+
+  return (
+    <section className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 lg:min-w-0">
+      <h3 className="font-semibold text-slate-400 mb-3 sm:mb-4 uppercase tracking-wide text-[clamp(0.75rem,2vw,1rem)]">
+        En atención
+      </h3>
+      {tickets.length > 0 ? (
+        <div className="space-y-2 sm:space-y-3 origin-top" style={{ zoom: scale }}>
+          {tickets.map((t) => (
+            <div
+              key={t.id}
+              className="flex items-center justify-between gap-3 sm:gap-4 bg-slate-800/60 border border-slate-600 rounded-xl px-3 py-3 sm:px-5 sm:py-4 min-w-0"
+            >
+              <div className="min-w-0">
+                <p className="text-slate-200 font-semibold text-[clamp(0.875rem,2.5vw,1.125rem)] truncate">
+                  {getOperatorName(t) ?? 'Operador'}
+                </p>
+                <p className="text-emerald-400 uppercase tracking-wide font-semibold text-[clamp(0.75rem,2.5vw,0.875rem)] mt-0.5 sm:mt-1 truncate">
+                  Ventanilla {t.window?.number}
+                </p>
+              </div>
+              <p className="font-black text-yellow-300 shrink-0 text-[clamp(1.25rem,5vmin,1.875rem)]">
+                {t.displayCode}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-slate-500 text-[clamp(0.75rem,2vw,0.875rem)]">
+          No hay ventanillas atendiendo en este momento
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function TvPage() {
   const [display, setDisplay] = useState<TvDisplay | null>(null);
+  const [pendingCalls, setPendingCalls] = useState<Ticket[]>([]);
   const [mediaIndex, setMediaIndex] = useState(0);
+  const [now, setNow] = useState(() => new Date());
+  const { highlighted, highlight, clearIfTicket } = useTurnoActualHighlight();
 
   const load = useCallback(async () => {
     const data = await api<TvDisplay>('/tv/display');
     setDisplay(data);
+    setPendingCalls(sortPendingCalls(data.pendingCalls));
   }, []);
+
+  const handleCallEvent = useCallback(
+    (ticket: Ticket) => {
+      setPendingCalls((prev) => upsertPendingCall(prev, ticket));
+      setDisplay((prev) =>
+        prev ? { ...prev, upcoming: prev.upcoming.filter((t) => t.id !== ticket.id) } : prev
+      );
+      highlight(ticket);
+      announceTicket(ticket);
+    },
+    [highlight]
+  );
+
+  const handleTicketRemoved = useCallback(
+    (ticket: Ticket) => {
+      setPendingCalls((prev) => removePendingCall(prev, ticket.id));
+      clearIfTicket(ticket.id);
+    },
+    [clearIfTicket]
+  );
+
+  const handleAttending = useCallback(
+    (ticket: Ticket) => {
+      handleTicketRemoved(ticket);
+      setDisplay((prev) => {
+        if (!prev) return prev;
+        const attending = prev.attending.filter((t) => t.id !== ticket.id);
+        attending.push(ticket);
+        attending.sort((a, b) => (a.window?.number ?? 0) - (b.window?.number ?? 0));
+        return { ...prev, attending };
+      });
+    },
+    [handleTicketRemoved]
+  );
+
+  const handleAttendingEnded = useCallback(
+    (ticket: Ticket) => {
+      handleTicketRemoved(ticket);
+      setDisplay((prev) =>
+        prev ? { ...prev, attending: prev.attending.filter((t) => t.id !== ticket.id) } : prev
+      );
+    },
+    [handleTicketRemoved]
+  );
 
   useEffect(() => {
     initSpeech();
@@ -27,48 +136,35 @@ export function TvPage() {
     const socket = getSocket();
     socket.emit('join:tv');
 
-    const onCalled = (ticket: Ticket) => {
-      setDisplay((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentCall: ticket,
-              upcoming: prev.upcoming.filter((t) => t.id !== ticket.id),
-            }
-          : prev
-      );
-      announceTicket(ticket);
-    };
-
-    const onRepeated = (ticket: Ticket) => {
-      announceTicket(ticket);
-      setDisplay((prev) => (prev?.currentCall?.id === ticket.id ? { ...prev, currentCall: ticket } : prev));
-    };
-
     const refresh = () => load();
 
-    socket.on('ticket:called', onCalled);
-    socket.on('ticket:repeated', onRepeated);
+    socket.on('ticket:called', handleCallEvent);
+    socket.on('ticket:repeated', handleCallEvent);
+    socket.on('ticket:attending', handleAttending);
+    socket.on('ticket:finished', handleAttendingEnded);
+    socket.on('ticket:absent', handleAttendingEnded);
     socket.on('ticket:created', refresh);
-    socket.on('ticket:attending', refresh);
-    socket.on('ticket:finished', refresh);
-    socket.on('ticket:absent', refresh);
     socket.on('tv:media-updated', refresh);
     socket.on('tv:ticker-updated', refresh);
     socket.on('tv:settings-updated', refresh);
 
     return () => {
-      socket.off('ticket:called', onCalled);
-      socket.off('ticket:repeated', onRepeated);
+      socket.off('ticket:called', handleCallEvent);
+      socket.off('ticket:repeated', handleCallEvent);
+      socket.off('ticket:attending', handleAttending);
+      socket.off('ticket:finished', handleAttendingEnded);
+      socket.off('ticket:absent', handleAttendingEnded);
       socket.off('ticket:created', refresh);
-      socket.off('ticket:attending', refresh);
-      socket.off('ticket:finished', refresh);
-      socket.off('ticket:absent', refresh);
       socket.off('tv:media-updated', refresh);
       socket.off('tv:ticker-updated', refresh);
       socket.off('tv:settings-updated', refresh);
     };
-  }, [load]);
+  }, [load, handleCallEvent, handleAttending, handleAttendingEnded]);
+
+  useEffect(() => {
+    const clock = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(clock);
+  }, []);
 
   useEffect(() => {
     if (!display?.media.length) return;
@@ -92,6 +188,8 @@ export function TvPage() {
   const tickerText = display.ticker.map((t) => t.message).join('   ·   ');
   const upcomingCount = display.settings?.upcomingCount ?? 3;
   const welcomeMessage = display.settings?.welcomeMessage ?? 'BIENVENIDOS A CENCOIC';
+  const highlightedId = highlighted?.ticket.id;
+  const recentCalls = pendingCalls.filter((t) => t.id !== highlightedId);
 
   return (
     <div className="h-dvh min-h-dvh max-h-dvh bg-slate-900 text-white flex flex-col overflow-hidden">
@@ -102,25 +200,46 @@ export function TvPage() {
       </header>
 
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
-        <section className="shrink-0 lg:shrink lg:w-[32%] lg:min-w-0 flex flex-col justify-center items-center px-4 py-4 sm:p-6 border-b lg:border-b-0 lg:border-r border-slate-700">
-          <p className="text-slate-400 uppercase tracking-widest mb-2 sm:mb-3 text-[clamp(0.75rem,2vw,1.125rem)]">
-            Turno actual
-          </p>
-          {display.currentCall ? (
-            <>
-              <p className="font-black leading-none text-yellow-400 text-[clamp(2.5rem,12vmin,6rem)]">
-                {display.currentCall.displayCode}
+        <section className="shrink-0 lg:shrink lg:w-[32%] lg:min-w-0 flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-slate-700 overflow-hidden">
+          <div className="shrink-0 flex flex-col justify-center items-center px-4 py-4 sm:p-6">
+            <p className="text-slate-400 uppercase tracking-widest mb-2 sm:mb-3 text-[clamp(0.75rem,2vw,1.125rem)]">
+              Turno actual
+            </p>
+            {highlighted ? (
+              <div key={highlighted.key} className="tv-call-spotlight flex flex-col items-center justify-center text-center w-full">
+                <p className="font-black leading-none text-yellow-400 text-[clamp(2.5rem,12vmin,6rem)]">
+                  {highlighted.ticket.displayCode}
+                </p>
+                <p className="mt-2 sm:mt-4 text-emerald-400 text-[clamp(1.125rem,4vmin,1.875rem)]">
+                  Ventanilla {highlighted.ticket.window?.number}
+                </p>
+                {highlighted.ticket.callCount > 1 && (
+                  <p className="mt-2 text-amber-300/80 text-[clamp(0.7rem,1.8vmin,0.875rem)] uppercase tracking-wide">
+                    Llamada {highlighted.ticket.callCount}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-[clamp(1rem,3vmin,1.5rem)]">En espera...</p>
+            )}
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 border-t border-slate-700/60">
+            <h3 className="font-semibold text-slate-400 my-3 sm:my-4 uppercase tracking-wide text-[clamp(0.7rem,1.8vw,0.875rem)]">
+              Últimos llamados
+            </h3>
+            {recentCalls.length > 0 ? (
+              <div className="space-y-2">
+                {recentCalls.map((t) => (
+                  <RecentCallRow key={t.id} ticket={t} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-[clamp(0.7rem,1.8vw,0.8rem)]">
+                No hay turnos llamados pendientes
               </p>
-              <p className="mt-2 sm:mt-4 text-emerald-400 text-[clamp(1.125rem,4vmin,1.875rem)]">
-                Ventanilla {display.currentCall.window?.number}
-              </p>
-              <p className="text-slate-400 mt-1 sm:mt-2 text-[clamp(0.75rem,2vmin,1rem)] text-center">
-                {display.currentCall.priority.name}
-              </p>
-            </>
-          ) : (
-            <p className="text-slate-500 text-[clamp(1rem,3vmin,1.5rem)]">En espera...</p>
-          )}
+            )}
+          </div>
         </section>
 
         <section className="h-[22vh] sm:h-[28vh] md:h-[32vh] lg:h-auto lg:flex-1 lg:min-h-0 lg:w-[38%] lg:max-w-[38%] flex flex-col border-b lg:border-b-0 lg:border-r border-slate-700 overflow-hidden">
@@ -159,39 +278,17 @@ export function TvPage() {
               </div>
             )}
           </div>
+          <div className="shrink-0 border-t border-slate-700 bg-slate-900/90 px-4 py-2 sm:py-3 text-center">
+            <p className="font-semibold text-white tabular-nums text-[clamp(1.25rem,4vw,2rem)] tracking-wide">
+              {now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </p>
+            <p className="text-slate-400 capitalize text-[clamp(0.7rem,2vw,0.875rem)]">
+              {now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+          </div>
         </section>
 
-        <section className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 lg:min-w-0">
-          <h3 className="font-semibold text-slate-400 mb-3 sm:mb-4 uppercase tracking-wide text-[clamp(0.75rem,2vw,1rem)]">
-            En atención
-          </h3>
-          {display.attending.length > 0 ? (
-            <div className="space-y-2 sm:space-y-3">
-              {display.attending.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center justify-between gap-3 sm:gap-4 bg-slate-800/60 border border-slate-600 rounded-xl px-3 py-3 sm:px-5 sm:py-4 min-w-0"
-                >
-                  <div className="min-w-0">
-                    <p className="text-emerald-400 uppercase tracking-wide font-semibold text-[clamp(0.75rem,2.5vw,0.875rem)] truncate">
-                      Ventanilla {t.window?.number}
-                    </p>
-                    <p className="text-slate-500 mt-0.5 sm:mt-1 text-[clamp(0.65rem,2vw,0.75rem)] truncate">
-                      {t.priority.name}
-                    </p>
-                  </div>
-                  <p className="font-black text-yellow-300 shrink-0 text-[clamp(1.25rem,5vmin,1.875rem)]">
-                    {t.displayCode}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-slate-500 text-[clamp(0.75rem,2vw,0.875rem)]">
-              No hay ventanillas atendiendo en este momento
-            </p>
-          )}
-        </section>
+        <AttendingSection tickets={display.attending} />
       </div>
 
       {upcomingCount > 0 && (
@@ -211,7 +308,6 @@ export function TvPage() {
                   </span>
                   <div className="text-center min-w-0">
                     <p className="font-bold text-amber-300 text-[clamp(1rem,4vmin,1.5rem)]">{t.displayCode}</p>
-                    <p className="text-slate-400 text-[clamp(0.65rem,2vw,0.75rem)] truncate">{t.priority.name}</p>
                   </div>
                 </div>
               ))}
@@ -237,6 +333,36 @@ export function TvPage() {
         .animate-marquee {
           display: inline-block;
           animation: marquee 30s linear infinite;
+        }
+        @keyframes tv-call-spotlight {
+          0% {
+            opacity: 0;
+            transform: scale(0.82);
+          }
+          18% {
+            opacity: 1;
+            transform: scale(1.1);
+          }
+          35% {
+            transform: scale(1);
+          }
+          55% {
+            box-shadow: inset 0 0 0 0 rgba(250, 204, 21, 0);
+            background-color: rgba(30, 58, 138, 0.15);
+          }
+          70% {
+            box-shadow: inset 0 0 80px rgba(250, 204, 21, 0.25);
+            background-color: rgba(30, 58, 138, 0.35);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+            box-shadow: inset 0 0 0 rgba(250, 204, 21, 0);
+            background-color: transparent;
+          }
+        }
+        .tv-call-spotlight {
+          animation: tv-call-spotlight 5s ease-out forwards;
         }
       `}</style>
     </div>

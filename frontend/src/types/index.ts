@@ -24,6 +24,7 @@ export interface Window {
   isActive: boolean;
   operators?: { user: { id: string; fullName: string } }[];
   priorities?: { priority: Priority }[];
+  sessions?: { user: { fullName: string } }[];
   currentTicket?: Ticket | null;
   todayServed?: number;
   activeSession?: { user: { fullName: string }; startedAt: string } | null;
@@ -62,6 +63,7 @@ export interface TickerMessage {
 export interface TvSettings {
   id: string;
   upcomingCount: number;
+  windowQueueCount: number;
   welcomeMessage: string;
 }
 
@@ -78,7 +80,7 @@ export interface TicketPrintSettings {
 }
 
 export interface TvDisplay {
-  currentCall: Ticket | null;
+  pendingCalls: Ticket[];
   attending: Ticket[];
   media: TvMedia[];
   ticker: TickerMessage[];

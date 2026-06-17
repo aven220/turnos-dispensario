@@ -1,0 +1,18 @@
+[Unit]
+Description=Turnos Dispensario
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/turnos-dispensario
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/turnos-dispensario/backend/.env
+ExecStartPre=/usr/bin/docker compose -f /opt/turnos-dispensario/docker-compose.yml up -d --wait
+ExecStart=/usr/bin/npm run start:server
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

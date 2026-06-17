@@ -179,7 +179,19 @@ export class TicketService {
     const updated = await prisma.ticket.update({
       where: { id: ticketId },
       data: { status: TicketStatus.ATENDIENDO, attendingAt: new Date() },
-      include: { priority: true, window: true },
+      include: {
+        priority: true,
+        window: {
+          include: {
+            sessions: {
+              where: { endedAt: null },
+              include: { user: { select: { fullName: true } } },
+              take: 1,
+              orderBy: { startedAt: 'desc' },
+            },
+          },
+        },
+      },
     });
 
     await logAudit({
@@ -299,13 +311,25 @@ export class TicketService {
         status: TicketStatus.ATENDIENDO,
         windowId: { not: null },
       },
-      include: { priority: true, window: true },
+      include: {
+        priority: true,
+        window: {
+          include: {
+            sessions: {
+              where: { endedAt: null },
+              include: { user: { select: { fullName: true } } },
+              take: 1,
+              orderBy: { startedAt: 'desc' },
+            },
+          },
+        },
+      },
       orderBy: { window: { number: 'asc' } },
     });
   }
 
-  async getCurrentCall() {
-    return prisma.ticket.findFirst({
+  async getPendingCalls() {
+    return prisma.ticket.findMany({
       where: { datePrefix: todayPrefix(), status: TicketStatus.LLAMADO },
       include: { priority: true, window: true },
       orderBy: { calledAt: 'desc' },
@@ -324,7 +348,64 @@ export class TicketService {
     });
   }
 
+  async getUpcomingForWindow(windowId: string, limit = 3) {
+    if (limit <= 0) return [];
+
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+
+    const window = await prisma.window.findUnique({
+      where: { id: windowId },
+      include: {
+        priorities: {
+          include: { priority: true },
+          orderBy: { priority: { sortOrder: 'asc' } },
+        },
+      },
+    });
+
+    if (!window?.priorities.length) return [];
+
+    const priorityIds = window.priorities.map((wp) => wp.priorityId);
+    const tickets = await prisma.ticket.findMany({
+      where: {
+        status: TicketStatus.GENERADO,
+        datePrefix,
+        priorityId: { in: priorityIds },
+      },
+      include: { priority: true },
+      orderBy: [{ priority: { sortOrder: 'asc' } }, { createdAt: 'asc' }],
+      take: limit,
+    });
+
+    return tickets;
+  }
+
+  async countPendingForWindow(windowId: string) {
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+
+    const window = await prisma.window.findUnique({
+      where: { id: windowId },
+      include: { priorities: { select: { priorityId: true } } },
+    });
+
+    if (!window?.priorities.length) return 0;
+
+    const priorityIds = window.priorities.map((wp) => wp.priorityId);
+    return prisma.ticket.count({
+      where: {
+        status: TicketStatus.GENERADO,
+        datePrefix,
+        priorityId: { in: priorityIds },
+      },
+    });
+  }
+
   async getWindowState(windowId: string) {
+    const { getTvSettings } = await import('./tv-settings.service.js');
+    const settings = await getTvSettings();
+
     const activeTicket = await prisma.ticket.findFirst({
       where: {
         windowId,
@@ -347,7 +428,10 @@ export class TicketService {
       },
     });
 
-    return { activeTicket, session, todayServed };
+    const upcoming = await this.getUpcomingForWindow(windowId, settings.windowQueueCount);
+    const queueTotal = await this.countPendingForWindow(windowId);
+
+    return { activeTicket, session, todayServed, upcoming, queueCount: settings.windowQueueCount, queueTotal };
   }
 
   async getStats(dateFrom?: Date, dateTo?: Date) {

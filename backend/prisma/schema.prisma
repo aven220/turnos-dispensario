@@ -195,6 +195,7 @@ model TickerMessage {
 model TvSettings {
   id                String @id @default("default")
   upcomingCount     Int    @default(3) @map("upcoming_count")
+  windowQueueCount  Int    @default(3) @map("window_queue_count")
   welcomeMessage    String @default("BIENVENIDOS A CENCOIC") @map("welcome_message")
 
   @@map("tv_settings")
