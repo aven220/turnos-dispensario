@@ -32,7 +32,10 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
   const stats = useMemo(() => {
     const withOperator = windows.filter((w) => operatorOf(w)).length;
     const attending = windows.filter((w) => w.currentTicket?.status === 'ATENDIENDO').length;
-    return { total: windows.length, withOperator, attending, free: windows.length - attending };
+    const paused = windows.filter(
+      (w) => w.activeSession && w.activeSession.availableForService === false
+    ).length;
+    return { total: windows.length, withOperator, attending, paused, free: windows.length - attending };
   }, [windows]);
 
   async function createWindow(e: FormEvent) {
@@ -154,11 +157,12 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
         <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
           { label: 'Ventanillas', value: stats.total, color: 'text-slate-800' },
           { label: 'Con operador', value: stats.withOperator, color: 'text-blue-700' },
           { label: 'Atendiendo', value: stats.attending, color: 'text-emerald-700' },
+          { label: 'En pausa', value: stats.paused, color: 'text-amber-700' },
           { label: 'Disponibles', value: stats.free, color: 'text-slate-600' },
         ].map((s) => (
           <Card key={s.label} className="!p-4 text-center">
@@ -257,20 +261,24 @@ function WindowCard({
   const operator = operatorOf(w);
   const priorityIds = w.priorities?.map((wp) => wp.priority.id) ?? [];
   const isBusy = w.currentTicket?.status === 'ATENDIENDO' || w.currentTicket?.status === 'LLAMADO';
+  const onBreak = w.activeSession?.availableForService === false;
   const statusLabel = !w.isActive
     ? { text: 'Inactiva', className: 'bg-slate-200 text-slate-600' }
-    : isBusy
-      ? { text: 'En turno', className: 'bg-amber-100 text-amber-800' }
-      : w.activeSession
-        ? { text: 'Sesión abierta', className: 'bg-emerald-100 text-emerald-800' }
-        : { text: 'Disponible', className: 'bg-blue-100 text-blue-800' };
+    : onBreak
+      ? { text: 'En pausa', className: 'bg-amber-100 text-amber-800' }
+      : isBusy
+        ? { text: 'En turno', className: 'bg-amber-100 text-amber-800' }
+        : w.activeSession
+          ? { text: 'En atención', className: 'bg-emerald-100 text-emerald-800' }
+          : { text: 'Sin sesión', className: 'bg-slate-100 text-slate-600' };
 
   return (
-    <Card className={`!p-0 overflow-hidden ${!w.isActive ? 'opacity-75' : ''}`}>
+    <Card className={`!p-0 overflow-hidden ${!w.isActive ? 'opacity-75' : onBreak ? 'ring-2 ring-amber-300' : ''}`}>
       <div className="flex items-stretch border-b border-slate-100">
         <div className="shrink-0 w-16 bg-slate-900 text-white flex flex-col items-center justify-center py-4">
           <span className="text-xs uppercase tracking-wider text-slate-400">Vent.</span>
           <span className="text-2xl font-black leading-none">{w.number}</span>
+          {onBreak && <span className="text-[10px] text-amber-400 mt-1 font-bold">PAUSA</span>}
         </div>
         <div className="flex-1 p-4 min-w-0">
           <div className="flex items-start justify-between gap-2">

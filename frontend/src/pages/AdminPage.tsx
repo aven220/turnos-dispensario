@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { AuditMonitor } from '../components/AuditMonitor';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
 import { WindowsManager } from '../components/WindowsManager';
@@ -22,16 +23,6 @@ const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   footerMessage: 'Espere a ser llamado en pantalla',
 };
 
-interface AuditLog {
-  id: string;
-  action: string;
-  details: string | null;
-  createdAt: string;
-  user: { fullName: string } | null;
-  window: { name: string; number: number } | null;
-  ticket: { displayCode: string } | null;
-}
-
 export function AdminPage() {
   const { token } = useAuth();
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -39,7 +30,6 @@ export function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [windows, setWindows] = useState<Window[]>([]);
   const [priorities, setPriorities] = useState<Priority[]>([]);
-  const [audit, setAudit] = useState<AuditLog[]>([]);
   const [tickerText, setTickerText] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaTitle, setMediaTitle] = useState('');
@@ -68,18 +58,16 @@ export function AdminPage() {
   const [ticketPrintError, setTicketPrintError] = useState('');
 
   async function loadAll() {
-    const [s, u, w, p, a] = await Promise.all([
+    const [s, u, w, p] = await Promise.all([
       api<Stats>('/stats'),
       api<User[]>('/users'),
       api<Window[]>('/windows'),
       api<Priority[]>('/priorities?includeInactive=true'),
-      api<AuditLog[]>('/stats/audit?limit=50'),
     ]);
     setStats(s);
     setUsers(u);
     setWindows(w);
     setPriorities(p);
-    setAudit(a);
   }
 
   async function loadTvConfig() {
@@ -155,9 +143,11 @@ export function AdminPage() {
     const refresh = () => loadAll();
     socket.on('ticket:created', refresh);
     socket.on('ticket:finished', refresh);
+    socket.on('window:availability-changed', refresh);
     return () => {
       socket.off('ticket:created', refresh);
       socket.off('ticket:finished', refresh);
+      socket.off('window:availability-changed', refresh);
     };
   }, [token]);
 
@@ -536,6 +526,7 @@ export function AdminPage() {
                   <th>Ausentes</th>
                   <th>Promedio</th>
                   <th>Operador</th>
+                  <th>Atención</th>
                 </tr>
               </thead>
               <tbody>
@@ -547,6 +538,17 @@ export function AdminPage() {
                     <td>{w.totalAbsent ?? 0}</td>
                     <td>{Math.floor(w.avgAttentionSeconds / 60)}m {w.avgAttentionSeconds % 60}s</td>
                     <td>{w.assignedUser ?? '—'}</td>
+                    <td>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        w.attentionStatus === 'ACTIVE'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : w.attentionStatus === 'PAUSED'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {w.attentionStatus === 'ACTIVE' ? 'Activo' : w.attentionStatus === 'PAUSED' ? 'En pausa' : 'Sin sesión'}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1034,27 +1036,7 @@ export function AdminPage() {
         </div>
       )}
 
-      {tab === 'audit' && (
-        <Card>
-          <h3 className="font-semibold mb-4">Auditoría del sistema</h3>
-          <div className="max-h-[600px] overflow-y-auto space-y-2">
-            {audit.map((log) => (
-              <div key={log.id} className="p-3 bg-slate-50 rounded-lg text-sm">
-                <div className="flex justify-between">
-                  <span className="font-medium">{log.action}</span>
-                  <span className="text-slate-400">{new Date(log.createdAt).toLocaleString('es-CO')}</span>
-                </div>
-                <p className="text-slate-600">
-                  {log.user?.fullName && `Usuario: ${log.user.fullName}`}
-                  {log.window && ` · Ventanilla: ${log.window.name}`}
-                  {log.ticket && ` · Turno: ${log.ticket.displayCode}`}
-                  {log.details && ` · ${log.details}`}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {tab === 'audit' && <AuditMonitor />}
     </Layout>
   );
 }

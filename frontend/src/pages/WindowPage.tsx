@@ -8,7 +8,7 @@ import type { Ticket } from '../types';
 interface WindowState {
   activeTicket: Ticket | null;
   todayServed: number;
-  session: { user: { fullName: string }; startedAt: string } | null;
+  session: { user: { fullName: string }; startedAt: string; availableForService: boolean } | null;
   upcoming: Ticket[];
   queueCount: number;
   queueTotal: number;
@@ -19,6 +19,7 @@ export function WindowPage() {
   const [state, setState] = useState<WindowState | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   const loadState = useCallback(async () => {
     if (!windowId) return;
@@ -39,6 +40,7 @@ export function WindowPage() {
     socket.on('ticket:finished', refresh);
     socket.on('ticket:absent', refresh);
     socket.on('tv:settings-updated', refresh);
+    socket.on('window:availability-changed', refresh);
     return () => {
       socket.off('ticket:created', refresh);
       socket.off('ticket:called', refresh);
@@ -47,6 +49,7 @@ export function WindowPage() {
       socket.off('ticket:finished', refresh);
       socket.off('ticket:absent', refresh);
       socket.off('tv:settings-updated', refresh);
+      socket.off('window:availability-changed', refresh);
     };
   }, [windowId, token, loadState]);
 
@@ -64,6 +67,23 @@ export function WindowPage() {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function setAvailability(available: boolean) {
+    if (!windowId) return;
+    setError('');
+    setAvailabilityLoading(true);
+    try {
+      await api(`/tickets/window/${windowId}/availability`, {
+        method: 'PATCH',
+        body: JSON.stringify({ available }),
+      });
+      await loadState();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cambiar estado');
+    } finally {
+      setAvailabilityLoading(false);
     }
   }
 
@@ -94,9 +114,52 @@ export function WindowPage() {
 
   const ticket = state?.activeTicket;
   const showQueue = (state?.queueCount ?? 0) > 0;
+  const isAvailable = state?.session?.availableForService !== false;
 
   return (
     <Layout title="Módulo Ventanilla">
+      <Card className={`mb-6 border-2 ${isAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modo atención</p>
+            <p className={`text-xl font-bold mt-1 ${isAvailable ? 'text-emerald-800' : 'text-amber-800'}`}>
+              {isAvailable ? 'Activo — recibiendo turnos' : 'En pausa — no atiende turnos'}
+            </p>
+            <p className="text-sm text-slate-600 mt-1">
+              {isAvailable
+                ? 'Use pausa al salir a almorzar o cuando no pueda atender.'
+                : 'El administrador verá esta ventanilla fuera de atención.'}
+            </p>
+          </div>
+          <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white shrink-0 self-start sm:self-center">
+            <button
+              type="button"
+              disabled={availabilityLoading || isAvailable}
+              onClick={() => setAvailability(true)}
+              className={`px-5 py-3 text-sm font-semibold transition ${
+                isAvailable
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-slate-600 hover:bg-emerald-50 disabled:opacity-50'
+              }`}
+            >
+              Activo
+            </button>
+            <button
+              type="button"
+              disabled={availabilityLoading || !isAvailable}
+              onClick={() => setAvailability(false)}
+              className={`px-5 py-3 text-sm font-semibold transition border-l border-slate-200 ${
+                !isAvailable
+                  ? 'bg-amber-500 text-white'
+                  : 'text-slate-600 hover:bg-amber-50 disabled:opacity-50'
+              }`}
+            >
+              En pausa
+            </button>
+          </div>
+        </div>
+      </Card>
+
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
           {ticket ? (
@@ -112,15 +175,19 @@ export function WindowPage() {
             </div>
           ) : (
             <div className="text-center py-16 text-slate-400">
-              <p className="text-xl">Sin turno activo</p>
-              <p className="text-sm mt-2">Presione &quot;Tomar siguiente&quot; para asignar automáticamente</p>
+              <p className="text-xl">{isAvailable ? 'Sin turno activo' : 'Ventanilla en pausa'}</p>
+              <p className="text-sm mt-2">
+                {isAvailable
+                  ? 'Presione "Tomar siguiente" para asignar automáticamente'
+                  : 'Active el modo atención para tomar turnos'}
+              </p>
             </div>
           )}
 
           {error && <p className="text-red-600 text-center mb-4">{error}</p>}
 
           <div className="grid grid-cols-2 gap-3">
-            <Button onClick={takeNext} disabled={loading || !!ticket} className="col-span-2 py-4 text-lg" variant="primary">
+            <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable} className="col-span-2 py-4 text-lg" variant="primary">
               Tomar siguiente
             </Button>
             <Button onClick={() => action('repeat')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount >= 3}>
@@ -143,6 +210,11 @@ export function WindowPage() {
             <h3 className="font-semibold mb-4">Estado de sesión</h3>
             <dl className="space-y-3 text-sm">
               <div><dt className="text-slate-500">Operador</dt><dd className="font-medium">{user?.fullName}</dd></div>
+              <div><dt className="text-slate-500">Modo atención</dt>
+                <dd className={`font-semibold ${isAvailable ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {isAvailable ? 'Activo' : 'En pausa'}
+                </dd>
+              </div>
               <div><dt className="text-slate-500">Inicio sesión</dt><dd>{state?.session ? new Date(state.session.startedAt).toLocaleTimeString('es-CO') : '—'}</dd></div>
               <div><dt className="text-slate-500">Turnos atendidos hoy</dt><dd className="text-2xl font-bold text-emerald-600">{state?.todayServed ?? 0}</dd></div>
             </dl>

@@ -136,12 +136,13 @@ model Ticket {
 }
 
 model OperatorSession {
-  id           String    @id @default(cuid())
-  userId       String    @map("user_id")
-  windowId     String    @map("window_id")
-  startedAt    DateTime  @default(now()) @map("started_at")
-  endedAt      DateTime? @map("ended_at")
-  ticketsServed Int      @default(0) @map("tickets_served")
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  windowId          String    @map("window_id")
+  startedAt         DateTime  @default(now()) @map("started_at")
+  endedAt           DateTime? @map("ended_at")
+  ticketsServed     Int       @default(0) @map("tickets_served")
+  availableForService Boolean   @default(true) @map("available_for_service")
 
   user   User   @relation(fields: [userId], references: [id])
   window Window @relation(fields: [windowId], references: [id])

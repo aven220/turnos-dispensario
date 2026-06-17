@@ -139,4 +139,25 @@ router.get('/window/:windowId/state', requireRoles(UserRole.WINDOW, UserRole.ADM
   res.json(state);
 });
 
+router.patch('/window/:windowId/availability', requireRoles(UserRole.WINDOW), async (req, res, next) => {
+  try {
+    const windowId = paramId(req, 'windowId');
+    const { available } = z.object({ available: z.boolean() }).parse(req.body);
+    const session = await ticketService.setSessionAvailability(
+      windowId,
+      req.user!.sub,
+      available,
+      getClientIp(req)
+    );
+    const io = getIO();
+    const payload = { windowId, available: session.availableForService };
+    io.to(`window:${windowId}`).emit('window:availability-changed', payload);
+    io.to('admin').emit('window:availability-changed', payload);
+    io.to('windows').emit('window:availability-changed', payload);
+    res.json({ available: session.availableForService });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

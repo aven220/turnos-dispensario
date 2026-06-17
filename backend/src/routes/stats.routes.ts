@@ -39,6 +39,11 @@ router.get('/audit', async (req, res) => {
   res.json(logs);
 });
 
+router.get('/monitor', async (_req, res) => {
+  const data = await ticketService.getLiveMonitor();
+  res.json(data);
+});
+
 router.get('/export/excel', async (req, res, next) => {
   try {
     const { dateFrom, dateTo } = parseDates(req);

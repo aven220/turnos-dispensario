@@ -53,6 +53,14 @@ export class TicketService {
     await ensureDailyOperations();
     const datePrefix = todayPrefix();
 
+    const openSession = await prisma.operatorSession.findFirst({
+      where: { windowId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (openSession && !openSession.availableForService) {
+      throw new Error('La ventanilla está en pausa. Active el modo atención para tomar turnos.');
+    }
+
     const activeTicket = await prisma.ticket.findFirst({
       where: {
         windowId,
@@ -292,6 +300,86 @@ export class TicketService {
     });
   }
 
+  async getLiveMonitor() {
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+
+    const ticketInclude = {
+      priority: true,
+      window: true,
+      createdBy: { select: { fullName: true } },
+    } as const;
+
+    const activeInclude = {
+      priority: true,
+      window: {
+        include: {
+          operators: { include: { user: { select: { fullName: true } } } },
+          sessions: {
+            where: { endedAt: null },
+            include: { user: { select: { fullName: true } } },
+            take: 1,
+            orderBy: { startedAt: 'desc' as const },
+          },
+        },
+      },
+    } as const;
+
+    const [tickets, active, grouped] = await Promise.all([
+      prisma.ticket.findMany({
+        where: { datePrefix },
+        include: ticketInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.ticket.findMany({
+        where: {
+          datePrefix,
+          status: { in: [TicketStatus.LLAMADO, TicketStatus.ATENDIENDO] },
+        },
+        include: activeInclude,
+      }),
+      prisma.ticket.groupBy({
+        by: ['status'],
+        where: { datePrefix },
+        _count: true,
+      }),
+    ]);
+
+    const summary = {
+      total: 0,
+      generated: 0,
+      called: 0,
+      attending: 0,
+      finished: 0,
+      absent: 0,
+      cancelled: 0,
+    };
+
+    const statusKey: Record<TicketStatus, keyof typeof summary | null> = {
+      GENERADO: 'generated',
+      LLAMADO: 'called',
+      ATENDIENDO: 'attending',
+      FINALIZADO: 'finished',
+      AUSENTE: 'absent',
+      CANCELADO: 'cancelled',
+    };
+
+    for (const row of grouped) {
+      const key = statusKey[row.status];
+      if (key) summary[key] = row._count;
+      summary.total += row._count;
+    }
+
+    const statusOrder: Record<string, number> = { ATENDIENDO: 0, LLAMADO: 1 };
+    active.sort((a, b) => {
+      const diff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+      if (diff !== 0) return diff;
+      return (a.window?.number ?? 0) - (b.window?.number ?? 0);
+    });
+
+    return { summary, active, tickets, datePrefix };
+  }
+
   async getRecentCalls(limit = 10) {
     return prisma.ticket.findMany({
       where: {
@@ -434,6 +522,45 @@ export class TicketService {
     return { activeTicket, session, todayServed, upcoming, queueCount: settings.windowQueueCount, queueTotal };
   }
 
+  async setSessionAvailability(windowId: string, userId: string, available: boolean, ipAddress?: string) {
+    const session = await prisma.operatorSession.findFirst({
+      where: { windowId, userId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (!session) {
+      throw new Error('No hay sesión activa en esta ventanilla');
+    }
+
+    if (!available) {
+      const activeTicket = await prisma.ticket.findFirst({
+        where: {
+          windowId,
+          status: { in: [TicketStatus.LLAMADO, TicketStatus.ATENDIENDO] },
+        },
+      });
+      if (activeTicket) {
+        throw new Error('Finalice o marque ausente el turno actual antes de pausar la atención');
+      }
+    }
+
+    const updated = await prisma.operatorSession.update({
+      where: { id: session.id },
+      data: { availableForService: available },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
+    await logAudit({
+      userId,
+      action: available ? 'VENTANILLA_ACTIVA' : 'VENTANILLA_PAUSA',
+      details: updated.user.fullName,
+      windowId,
+      ipAddress,
+    });
+
+    return updated;
+  }
+
   async getStats(dateFrom?: Date, dateTo?: Date) {
     await ensureDailyOperations();
 
@@ -467,6 +594,11 @@ export class TicketService {
       where: { isActive: true },
       include: {
         operators: { include: { user: { select: { fullName: true } } } },
+        sessions: {
+          where: { endedAt: null },
+          take: 1,
+          orderBy: { startedAt: 'desc' },
+        },
         tickets: {
           where: ticketWindowFilter,
           select: { status: true, attendingAt: true, finishedAt: true, calledAt: true },
@@ -484,6 +616,13 @@ export class TicketService {
       const avgSeconds =
         durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
 
+      const openSession = w.sessions[0];
+      const attentionStatus = !openSession
+        ? ('OFFLINE' as const)
+        : openSession.availableForService
+          ? ('ACTIVE' as const)
+          : ('PAUSED' as const);
+
       return {
         windowId: w.id,
         windowName: w.name,
@@ -493,6 +632,7 @@ export class TicketService {
         totalCalled: w.tickets.filter((t) => t.calledAt).length,
         avgAttentionSeconds: avgSeconds,
         assignedUser: w.operators[0]?.user.fullName ?? null,
+        attentionStatus,
       };
     });
 

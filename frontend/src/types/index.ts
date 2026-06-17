@@ -28,7 +28,7 @@ export interface Window {
   sessions?: { user: { fullName: string } }[];
   currentTicket?: Ticket | null;
   todayServed?: number;
-  activeSession?: { user: { fullName: string }; startedAt: string } | null;
+  activeSession?: { user: { fullName: string }; startedAt: string; availableForService?: boolean } | null;
 }
 
 export type TicketStatus = 'GENERADO' | 'LLAMADO' | 'ATENDIENDO' | 'FINALIZADO' | 'AUSENTE' | 'CANCELADO';
@@ -43,6 +43,26 @@ export interface Ticket {
   window?: Window | null;
   createdAt: string;
   calledAt?: string | null;
+  attendingAt?: string | null;
+  finishedAt?: string | null;
+  createdBy?: { fullName: string };
+}
+
+export interface TicketMonitorSummary {
+  total: number;
+  generated: number;
+  called: number;
+  attending: number;
+  finished: number;
+  absent: number;
+  cancelled: number;
+}
+
+export interface TicketMonitorData {
+  summary: TicketMonitorSummary;
+  active: Ticket[];
+  tickets: Ticket[];
+  datePrefix: string;
 }
 
 export interface TvMedia {
@@ -103,5 +123,6 @@ export interface Stats {
     totalAbsent?: number;
     avgAttentionSeconds: number;
     assignedUser: string | null;
+    attentionStatus: 'ACTIVE' | 'PAUSED' | 'OFFLINE';
   }[];
 }
