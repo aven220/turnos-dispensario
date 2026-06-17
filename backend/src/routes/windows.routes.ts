@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import { UserRole, TicketStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
@@ -61,6 +61,13 @@ router.get('/mine', authMiddleware, requireRoles(UserRole.WINDOW), async (req, r
 router.post('/', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
   try {
     const body = windowSchema.parse(req.body);
+
+    const taken = await prisma.window.findUnique({ where: { number: body.number } });
+    if (taken) {
+      res.status(400).json({ error: `El número ${body.number} ya está en uso por ${taken.name}` });
+      return;
+    }
+
     const window = await prisma.window.create({ data: body });
     await logAudit({ userId: req.user!.sub, action: 'VENTANILLA_CREADA', details: window.name, windowId: window.id, ipAddress: getClientIp(req) });
     res.status(201).json(window);
@@ -110,7 +117,7 @@ router.patch('/:id', authMiddleware, requireRoles(UserRole.ADMIN), async (req, r
 
 router.post('/:id/operators', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
   try {
-    const { userId } = z.object({ userId: z.string() }).parse(req.body);
+    const { userId, force } = z.object({ userId: z.string(), force: z.boolean().optional() }).parse(req.body);
     const windowId = paramId(req);
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -126,6 +133,16 @@ router.post('/:id/operators', authMiddleware, requireRoles(UserRole.ADMIN), asyn
 
     if (existing?.windowId === windowId) {
       res.json(existing);
+      return;
+    }
+
+    if (existing && !force) {
+      res.status(409).json({
+        error: `${existing.user.fullName} ya está en ${existing.window.name}. Use reasignar para moverlo.`,
+        code: 'OPERATOR_ALREADY_ASSIGNED',
+        operator: { id: userId, fullName: existing.user.fullName },
+        currentWindow: { id: existing.window.id, name: existing.window.name, number: existing.window.number },
+      });
       return;
     }
 
@@ -152,6 +169,88 @@ router.post('/:id/operators', authMiddleware, requireRoles(UserRole.ADMIN), asyn
       ipAddress: getClientIp(req),
     });
     res.status(existing ? 200 : 201).json(assignment);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id/operators', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const windowId = paramId(req);
+
+    const openSession = await prisma.operatorSession.findFirst({
+      where: { windowId, endedAt: null },
+      include: { user: { select: { fullName: true } } },
+    });
+    if (openSession) {
+      res.status(400).json({
+        error: `${openSession.user.fullName} tiene sesión abierta en esta ventanilla. Debe cerrar sesión primero.`,
+      });
+      return;
+    }
+
+    const removed = await prisma.windowOperator.deleteMany({ where: { windowId } });
+    if (removed.count === 0) {
+      res.status(404).json({ error: 'Esta ventanilla no tiene operador asignado' });
+      return;
+    }
+
+    const window = await prisma.window.findUnique({ where: { id: windowId } });
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'OPERADOR_DESASIGNADO',
+      details: window?.name ?? windowId,
+      windowId,
+      ipAddress: getClientIp(req),
+    });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const windowId = paramId(req);
+    const window = await prisma.window.findUniqueOrThrow({ where: { id: windowId } });
+
+    const busyTicket = await prisma.ticket.findFirst({
+      where: {
+        windowId,
+        status: { in: [TicketStatus.LLAMADO, TicketStatus.ATENDIENDO] },
+      },
+    });
+    if (busyTicket) {
+      res.status(400).json({
+        error: `No se puede eliminar: hay un turno en curso (${busyTicket.displayCode}). Finalícelo o márquelo ausente primero.`,
+      });
+      return;
+    }
+
+    const openSession = await prisma.operatorSession.findFirst({ where: { windowId, endedAt: null } });
+    if (openSession) {
+      res.status(400).json({ error: 'No se puede eliminar: hay un operador con sesión abierta.' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.windowOperator.deleteMany({ where: { windowId } });
+      await tx.windowPriority.deleteMany({ where: { windowId } });
+      await tx.operatorSession.updateMany({
+        where: { windowId, endedAt: null },
+        data: { endedAt: new Date() },
+      });
+      await tx.ticket.updateMany({ where: { windowId }, data: { windowId: null } });
+      await tx.window.delete({ where: { id: windowId } });
+    });
+
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'VENTANILLA_ELIMINADA',
+      details: `${window.name} (nº ${window.number})`,
+      ipAddress: getClientIp(req),
+    });
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

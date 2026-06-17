@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
+import { WindowsManager } from '../components/WindowsManager';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob, apiUpload } from '../services/api';
@@ -229,17 +230,6 @@ export function AdminPage() {
     }
   }
 
-  async function createWindow(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    await api('/windows', {
-      method: 'POST',
-      body: JSON.stringify({ name: fd.get('name'), number: Number(fd.get('number')) }),
-    });
-    e.currentTarget.reset();
-    loadAll();
-  }
-
   async function createPriority(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPriorityError('');
@@ -351,48 +341,6 @@ export function AdminPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error al eliminar');
     }
-  }
-
-  async function updateWindow(windowId: string, data: { name: string; number: number }) {
-    try {
-      await api(`/windows/${windowId}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
-      loadAll();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al guardar');
-    }
-  }
-
-  async function assignOperator(windowId: string, userId: string) {
-    try {
-      await api(`/windows/${windowId}/operators`, {
-        method: 'POST',
-        body: JSON.stringify({ userId }),
-      });
-      loadAll();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al asignar');
-    }
-  }
-
-  function availableOperatorsForWindow(windowId: string) {
-    const currentOperatorId = windows.find((w) => w.id === windowId)?.operators?.[0]?.user.id;
-    return windowOperators.filter((u) => u.id !== currentOperatorId);
-  }
-
-  function operatorWindowLabel(userId: string) {
-    const user = users.find((u) => u.id === userId);
-    return user?.windowAssignments?.[0]?.window.name ?? null;
-  }
-
-  async function setWindowPriorities(windowId: string, priorityIds: string[]) {
-    await api(`/windows/${windowId}/priorities`, {
-      method: 'PUT',
-      body: JSON.stringify({ priorityIds }),
-    });
-    loadAll();
   }
 
   async function addTicker() {
@@ -689,100 +637,12 @@ export function AdminPage() {
       )}
 
       {tab === 'windows' && (
-        <div className="space-y-6">
-          <Card>
-            <h3 className="font-semibold mb-4">Crear ventanilla</h3>
-            <form onSubmit={createWindow} className="flex gap-3">
-              <input name="name" placeholder="Nombre" className="border rounded-lg px-3 py-2 flex-1" required />
-              <input name="number" type="number" placeholder="Número" className="border rounded-lg px-3 py-2 w-24" required />
-              <Button type="submit">Crear</Button>
-            </form>
-          </Card>
-
-          <div className="grid lg:grid-cols-2 gap-4">
-            {windows.map((w) => (
-              <Card key={w.id}>
-                <form
-                  className="flex gap-2 mb-3"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const fd = new FormData(e.currentTarget);
-                    updateWindow(w.id, {
-                      name: fd.get('name') as string,
-                      number: Number(fd.get('number')),
-                    });
-                  }}
-                >
-                  <input
-                    name="name"
-                    defaultValue={w.name}
-                    className="flex-1 border rounded-lg px-3 py-2 font-semibold"
-                    required
-                  />
-                  <input
-                    name="number"
-                    type="number"
-                    defaultValue={w.number}
-                    className="w-20 border rounded-lg px-3 py-2 text-center"
-                    min={1}
-                    required
-                  />
-                  <Button type="submit" variant="secondary">Guardar</Button>
-                </form>
-                <p className="text-sm text-slate-500 mb-3">
-                  Operador: {w.activeSession?.user.fullName ?? w.operators?.[0]?.user.fullName ?? 'Sin asignar'}
-                  {w.activeSession && ` · Desde ${new Date(w.activeSession.startedAt).toLocaleTimeString('es-CO')}`}
-                </p>
-                {w.currentTicket && (
-                  <p className="text-blue-700 font-medium mb-2">
-                    Turno actual: {w.currentTicket.displayCode} ({w.currentTicket.status})
-                  </p>
-                )}
-                <p className="text-emerald-600 font-medium mb-3">Atendidos hoy: {w.todayServed ?? 0}</p>
-
-                <div className="space-y-2">
-                  <select
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                    onChange={(e) => e.target.value && assignOperator(w.id, e.target.value)}
-                    defaultValue=""
-                  >
-                    <option value="">Asignar operador...</option>
-                    {availableOperatorsForWindow(w.id).map((u) => {
-                      const assigned = operatorWindowLabel(u.id);
-                      return (
-                        <option key={u.id} value={u.id}>
-                          {u.fullName}{assigned ? ` → ${assigned}` : ' (sin asignar)'}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <p className="text-xs text-slate-400">Cada operador solo puede tener una ventanilla. Reasignar lo mueve automáticamente.</p>
-
-                  <div className="flex flex-wrap gap-1">
-                    {priorities.filter((p) => p.isActive !== false).map((p) => {
-                      const active = w.priorities?.some((wp) => wp.priority.id === p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => {
-                            const current = w.priorities?.map((wp) => wp.priority.id) ?? [];
-                            const next = active ? current.filter((id) => id !== p.id) : [...current, p.id];
-                            setWindowPriorities(w.id, next);
-                          }}
-                          className={`text-xs px-2 py-1 rounded-full border ${
-                            active ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-slate-50 text-slate-500'
-                          }`}
-                        >
-                          {p.code}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+        <WindowsManager
+          windows={windows}
+          priorities={priorities}
+          operators={windowOperators}
+          onRefresh={loadAll}
+        />
       )}
 
       {tab === 'priorities' && (
