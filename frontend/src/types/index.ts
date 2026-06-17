@@ -15,6 +15,7 @@ export interface Priority {
   code: string;
   sortOrder: number;
   isActive?: boolean;
+  _count?: { tickets: number };
 }
 
 export interface Window {

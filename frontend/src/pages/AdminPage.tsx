@@ -342,6 +342,17 @@ export function AdminPage() {
     }
   }
 
+  async function deletePriority(priorityId: string, label: string) {
+    if (!confirm(`¿Eliminar permanentemente la prioridad "${label}"?\n\nSolo se permite si no tiene turnos asociados.`)) return;
+    try {
+      await api(`/priorities/${priorityId}`, { method: 'DELETE' });
+      if (editingPriority?.id === priorityId) cancelEditPriority();
+      loadAll();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar');
+    }
+  }
+
   async function updateWindow(windowId: string, data: { name: string; number: number }) {
     try {
       await api(`/windows/${windowId}`, {
@@ -873,22 +884,29 @@ export function AdminPage() {
             )}
           </Card>
           <Card>
-            <h3 className="font-semibold mb-4">Prioridades</h3>
+            <h3 className="font-semibold mb-1">Prioridades</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Si ve duplicados, elimine las que no use (sin turnos asociados). Mantenga una sola por código.
+            </p>
             <div className="space-y-2">
               {priorities.map((p) => (
-                <div key={p.id} className={`flex justify-between items-center p-3 rounded-lg ${editingPriority?.id === p.id ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
-                  <div>
+                <div key={p.id} className={`flex justify-between items-center gap-2 p-3 rounded-lg ${editingPriority?.id === p.id ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
+                  <div className="min-w-0">
                     <span className="font-medium">{p.name}</span>
                     <span className="text-sm text-slate-500 ml-2">{p.code} · Acomodo {p.sortOrder}</span>
                     {p.isActive === false && <span className="text-xs text-red-500 ml-2">Inactiva</span>}
+                    {(p._count?.tickets ?? 0) > 0 && (
+                      <span className="text-xs text-amber-600 ml-2">{p._count!.tickets} turno(s)</span>
+                    )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 shrink-0 justify-end">
                     <Button variant="secondary" onClick={() => startEditPriority(p)}>Editar</Button>
                     {p.isActive === false ? (
                       <Button variant="success" onClick={() => reactivatePriority(p.id)}>Reactivar</Button>
                     ) : (
                       <Button variant="danger" onClick={() => deactivatePriority(p.id)}>Desactivar</Button>
                     )}
+                    <Button variant="danger" onClick={() => deletePriority(p.id, p.name)}>Eliminar</Button>
                   </div>
                 </div>
               ))}

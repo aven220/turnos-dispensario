@@ -13,7 +13,8 @@ router.get('/', async (req, res) => {
   const includeInactive = req.query.includeInactive === 'true' && req.user!.role === UserRole.ADMIN;
   const priorities = await prisma.priority.findMany({
     where: includeInactive ? undefined : { isActive: true },
-    orderBy: { sortOrder: 'asc' },
+    include: { _count: { select: { tickets: true } } },
+    orderBy: [{ isActive: 'desc' }, { sortOrder: 'asc' }, { code: 'asc' }],
   });
   res.json(priorities);
 });
@@ -26,7 +27,18 @@ const prioritySchema = z.object({
 
 router.post('/', requireRoles(UserRole.ADMIN), async (req, res, next) => {
   try {
-    const body = prioritySchema.parse(req.body);
+    const body = prioritySchema.parse({
+      ...req.body,
+      name: typeof req.body.name === 'string' ? req.body.name.trim() : req.body.name,
+      code: typeof req.body.code === 'string' ? req.body.code.trim().toUpperCase() : req.body.code,
+    });
+
+    const existing = await prisma.priority.findUnique({ where: { code: body.code } });
+    if (existing) {
+      res.status(400).json({ error: `El código ${body.code} ya está registrado` });
+      return;
+    }
+
     const priority = await prisma.priority.create({ data: body });
     await logAudit({ userId: req.user!.sub, action: 'PRIORIDAD_CREADA', details: priority.name, ipAddress: getClientIp(req) });
     res.status(201).json(priority);
@@ -58,6 +70,35 @@ router.patch('/:id', requireRoles(UserRole.ADMIN), async (req, res, next) => {
     const priority = await prisma.priority.update({ where: { id: priorityId }, data: body });
     await logAudit({ userId: req.user!.sub, action: 'PRIORIDAD_EDITADA', details: priority.name, ipAddress: getClientIp(req) });
     res.json(priority);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', requireRoles(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const priorityId = paramId(req);
+    const priority = await prisma.priority.findUniqueOrThrow({
+      where: { id: priorityId },
+      include: { _count: { select: { tickets: true } } },
+    });
+
+    if (priority._count.tickets > 0) {
+      res.status(400).json({
+        error: `No se puede eliminar: tiene ${priority._count.tickets} turno(s) asociado(s). Desactívela si ya no la usa.`,
+      });
+      return;
+    }
+
+    await prisma.windowPriority.deleteMany({ where: { priorityId } });
+    await prisma.priority.delete({ where: { id: priorityId } });
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'PRIORIDAD_ELIMINADA',
+      details: `${priority.name} (${priority.code})`,
+      ipAddress: getClientIp(req),
+    });
+    res.status(204).send();
   } catch (err) {
     next(err);
   }
