@@ -10,6 +10,9 @@ export async function getTvSettings() {
       upcomingCount: 3,
       windowQueueCount: 3,
       welcomeMessage: 'BIENVENIDOS A CENCOIC',
+      speechRate: 0.9,
+      speechVoice: '',
+      speechLang: 'es-ES',
     },
     update: {},
   });
@@ -20,6 +23,9 @@ export async function updateTvSettings(data: {
   upcomingCount?: number;
   windowQueueCount?: number;
   welcomeMessage?: string;
+  speechRate?: number;
+  speechVoice?: string;
+  speechLang?: string;
 }) {
   return prisma.tvSettings.upsert({
     where: { id: SETTINGS_ID },
@@ -28,6 +34,9 @@ export async function updateTvSettings(data: {
       upcomingCount: data.upcomingCount ?? 3,
       windowQueueCount: data.windowQueueCount ?? 3,
       welcomeMessage: data.welcomeMessage ?? 'BIENVENIDOS A CENCOIC',
+      speechRate: data.speechRate ?? 0.9,
+      speechVoice: data.speechVoice ?? '',
+      speechLang: data.speechLang ?? 'es-ES',
     },
     update: data,
   });

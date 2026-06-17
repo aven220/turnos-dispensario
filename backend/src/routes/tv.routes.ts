@@ -41,17 +41,22 @@ router.patch('/settings', async (req, res, next) => {
         upcomingCount: z.number().int().min(0).max(10).optional(),
         windowQueueCount: z.number().int().min(0).max(10).optional(),
         welcomeMessage: z.string().min(1).max(120).optional(),
+        speechRate: z.number().min(0.5).max(1.5).optional(),
+        speechVoice: z.string().max(200).optional(),
+        speechLang: z.string().min(2).max(12).optional(),
       })
       .parse({
         ...req.body,
         welcomeMessage: typeof req.body.welcomeMessage === 'string' ? req.body.welcomeMessage.trim() : req.body.welcomeMessage,
+        speechVoice: typeof req.body.speechVoice === 'string' ? req.body.speechVoice.trim() : req.body.speechVoice,
+        speechLang: typeof req.body.speechLang === 'string' ? req.body.speechLang.trim() : req.body.speechLang,
       });
     const settings = await updateTvSettings(body);
     getIO().to('tv').to('windows').emit('tv:settings-updated');
     await logAudit({
       userId: req.user!.sub,
       action: 'TV_CONFIG_ACTUALIZADA',
-      details: `TV próximos: ${settings.upcomingCount} · Ventanilla cola: ${settings.windowQueueCount}`,
+      details: `TV próximos: ${settings.upcomingCount} · Voz: ${settings.speechVoice || 'neutra'} · Velocidad: ${settings.speechRate}`,
       ipAddress: getClientIp(req),
     });
     res.json(settings);

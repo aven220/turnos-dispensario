@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { AuditMonitor } from '../components/AuditMonitor';
+import { TvSpeechConfig } from '../components/TvSpeechConfig';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
 import { WindowsManager } from '../components/WindowsManager';
@@ -7,6 +8,7 @@ import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob, apiUpload } from '../services/api';
 import { getSocket } from '../services/socket';
+import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
 
 type Tab = 'dashboard' | 'users' | 'windows' | 'priorities' | 'tv' | 'ticketPrint' | 'audit';
@@ -44,6 +46,8 @@ export function AdminPage() {
   const [upcomingCount, setUpcomingCount] = useState(3);
   const [windowQueueCount, setWindowQueueCount] = useState(3);
   const [welcomeMessage, setWelcomeMessage] = useState('BIENVENIDOS A CENCOIC');
+  const [speechRate, setSpeechRate] = useState(0.9);
+  const [speechVoice, setSpeechVoice] = useState('google');
   const [userError, setUserError] = useState('');
   const [userLoading, setUserLoading] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -82,6 +86,8 @@ export function AdminPage() {
     setUpcomingCount(settings.upcomingCount);
     setWindowQueueCount(settings.windowQueueCount);
     setWelcomeMessage(settings.welcomeMessage);
+    setSpeechRate(settings.speechRate ?? 0.9);
+    setSpeechVoice(normalizeVoicePreset(settings.speechVoice));
   }
 
   async function loadTicketPrintConfig() {
@@ -126,10 +132,15 @@ export function AdminPage() {
           upcomingCount,
           windowQueueCount,
           welcomeMessage: welcomeMessage.trim(),
+          speechRate,
+          speechVoice,
+          speechLang: 'es-ES',
         }),
       });
       setTvSettings(settings);
       setWelcomeMessage(settings.welcomeMessage);
+      setSpeechRate(settings.speechRate);
+      setSpeechVoice(normalizeVoicePreset(settings.speechVoice));
       setUpcomingCount(settings.upcomingCount);
       setWindowQueueCount(settings.windowQueueCount);
     } catch (err) {
@@ -458,6 +469,13 @@ export function AdminPage() {
     .filter(Boolean);
   if (tickerText.trim()) tickerPreviewParts.push(tickerText.trim());
   const tickerPreviewText = tickerPreviewParts.join('   ·   ');
+
+  const tvSettingsDirty =
+    tvSettings?.upcomingCount !== upcomingCount ||
+    tvSettings?.windowQueueCount !== windowQueueCount ||
+    tvSettings?.welcomeMessage !== welcomeMessage.trim() ||
+    tvSettings?.speechRate !== speechRate ||
+    normalizeVoicePreset(tvSettings?.speechVoice) !== normalizeVoicePreset(speechVoice);
 
   return (
     <Layout title="Panel Administrador">
@@ -821,11 +839,7 @@ export function AdminPage() {
               </div>
               <Button
                 onClick={saveTvSettings}
-                disabled={
-                  tvSettings?.upcomingCount === upcomingCount &&
-                  tvSettings?.windowQueueCount === windowQueueCount &&
-                  tvSettings?.welcomeMessage === welcomeMessage.trim()
-                }
+                disabled={!tvSettingsDirty}
               >
                 Guardar configuración TV
               </Button>
@@ -955,6 +969,19 @@ export function AdminPage() {
                   </div>
                 ))}
               </div>
+
+              <TvSpeechConfig
+                speechRate={speechRate}
+                speechVoice={speechVoice}
+                onRateChange={setSpeechRate}
+                onVoiceChange={setSpeechVoice}
+              />
+
+              {tvSettingsDirty && (
+                <Button onClick={saveTvSettings} className="mt-4">
+                  Guardar voz y configuración TV
+                </Button>
+              )}
             </Card>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { useTurnoActualHighlight } from '../hooks/useTurnoActualHighlight';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket, TvDisplay } from '../types';
-import { buildCallMessage, enqueueCallSpeech, initSpeech } from '../utils/speech';
+import { buildCallMessage, enqueueCallSpeech, initSpeech, normalizeVoicePreset, setSpeechSettings } from '../utils/speech';
 import { isYoutubeUrl, youtubeEmbedUrl } from '../utils/media';
 import { removePendingCall, sortPendingCalls, upsertPendingCall } from '../utils/tvCalls';
 
@@ -129,6 +129,15 @@ export function TvPage() {
     },
     [handleTicketRemoved]
   );
+
+  useEffect(() => {
+    if (!display?.settings) return;
+    setSpeechSettings({
+      rate: display.settings.speechRate ?? 0.9,
+      voiceName: normalizeVoicePreset(display.settings.speechVoice),
+      lang: 'es-ES',
+    });
+  }, [display?.settings]);
 
   useEffect(() => {
     initSpeech();

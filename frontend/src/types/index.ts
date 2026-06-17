@@ -86,6 +86,9 @@ export interface TvSettings {
   upcomingCount: number;
   windowQueueCount: number;
   welcomeMessage: string;
+  speechRate: number;
+  speechVoice: string;
+  speechLang: string;
 }
 
 export interface TicketPrintSettings {
