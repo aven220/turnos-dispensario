@@ -12,8 +12,8 @@ RUN npm ci
 COPY backend ./backend
 COPY frontend ./frontend
 
-RUN npm run build
 RUN cd backend && npx prisma generate
+RUN npm run build
 
 # ---
 FROM node:22-bookworm-slim AS runner
