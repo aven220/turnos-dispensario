@@ -76,9 +76,9 @@ npm run dev
 
 | Servicio | URL |
 |----------|-----|
-| Login / Admin | http://localhost:5173 |
+| Login / Admin | http://localhost:5174 |
 | API backend | http://localhost:4000 |
-| Pantalla TV | http://localhost:5173/tv |
+| Pantalla TV | http://localhost:5174/tv |
 | Salud del sistema | http://localhost:4000/api/health |
 
 ---
