@@ -18,7 +18,11 @@ const loginSchema = z.object({
 
 router.post('/login', async (req, res, next) => {
   try {
-    const body = loginSchema.parse(req.body);
+    const body = loginSchema.parse({
+      ...req.body,
+      username: typeof req.body.username === 'string' ? req.body.username.trim() : req.body.username,
+      password: typeof req.body.password === 'string' ? req.body.password.trim() : req.body.password,
+    });
     const user = await prisma.user.findUnique({ where: { username: body.username } });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
