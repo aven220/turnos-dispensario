@@ -30,6 +30,18 @@ if not errorlevel 1 (
 )
 :after_docker
 
+findstr /C:"5432" backend\.env >nul 2>&1
+if not errorlevel 1 (
+  findstr /C:"5544" backend\.env >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo [AVISO] backend\.env apunta al puerto 5432 ^(PostgreSQL nativo^).
+    echo Si usa PostgreSQL en Docker, ejecute:
+    echo   deploy\windows\10-corregir-database.bat
+    echo.
+  )
+)
+
 set NODE_ENV=production
 
 for /f "usebackq tokens=1,* delims==" %%a in (`findstr /B "PORT=" backend\.env 2^>nul`) do set APP_PORT=%%b
