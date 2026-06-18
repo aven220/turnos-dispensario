@@ -1,37 +1,31 @@
 #!/bin/sh
-set -e
 
 cd /app/backend
 
 echo "Aplicando migraciones..."
+MIGRATE_OK=0
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if npx prisma migrate deploy; then
+    MIGRATE_OK=1
     break
-  fi
-  if [ "$attempt" -eq 10 ]; then
-    echo "Error: no se pudo aplicar migraciones."
-    exit 1
   fi
   echo "Esperando base de datos... intento $attempt/10"
   sleep 3
 done
 
-USER_COUNT=$(node --input-type=module -e "
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
-try {
-  const count = await prisma.user.count();
-  console.log(count);
-} finally {
-  await prisma.\$disconnect();
-}
-" 2>/dev/null || echo "0")
+if [ "$MIGRATE_OK" -ne 1 ]; then
+  echo "ERROR: no se pudo aplicar migraciones."
+  echo "Revise: docker compose logs postgres"
+  exit 1
+fi
 
-if [ "${SEED_ON_START:-false}" = "true" ] || [ "$USER_COUNT" = "0" ]; then
-  echo "Cargando usuarios iniciales (admin, filtro, ventanillas)..."
-  npx tsx prisma/seed.ts
-else
-  echo "Usuarios existentes: $USER_COUNT (seed omitido)."
+if [ "${SEED_ON_START:-false}" = "true" ]; then
+  echo "Cargando usuarios iniciales..."
+  if npx tsx prisma/seed.ts; then
+    echo "Seed completado."
+  else
+    echo "AVISO: seed fallo. La app arrancara igual; ejecute seed manualmente despues."
+  fi
 fi
 
 echo "Iniciando aplicacion..."

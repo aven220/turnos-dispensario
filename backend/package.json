@@ -4,10 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "prisma generate && tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
@@ -24,7 +23,9 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "pdfkit": "^0.17.1",
+    "prisma": "^6.8.2",
     "socket.io": "^4.8.1",
+    "tsx": "^4.19.4",
     "zod": "^3.25.28"
   },
   "devDependencies": {
@@ -35,8 +36,9 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^22.15.21",
     "@types/pdfkit": "^0.13.9",
-    "prisma": "^6.8.2",
-    "tsx": "^4.19.4",
     "typescript": "^5.8.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

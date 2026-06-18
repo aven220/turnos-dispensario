@@ -13,7 +13,6 @@
     "db:deploy": "npm run db:deploy --workspace=backend",
     "db:seed": "npm run db:seed --workspace=backend",
     "db:verify-admin": "npm run db:verify-admin --workspace=backend",
-    "postinstall": "npm run db:generate --workspace=backend",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
