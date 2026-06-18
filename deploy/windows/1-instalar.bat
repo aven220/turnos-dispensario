@@ -23,8 +23,12 @@ call npm install
 if errorlevel 1 goto :error
 
 if not exist "backend\.env" (
-  echo [2/6] Creando backend\.env ...
-  copy /Y "deploy\windows\.env.example" "backend\.env"
+  echo [2/6] Creando backend\.env para servidor...
+  if exist "deploy\windows\.env.servidor.example" (
+    copy /Y "deploy\windows\.env.servidor.example" "backend\.env"
+  ) else (
+    copy /Y "deploy\windows\.env.example" "backend\.env"
+  )
 ) else (
   echo [2/6] backend\.env ya existe, no se sobrescribe.
 )
@@ -32,27 +36,30 @@ if not exist "backend\.env" (
 set USE_DOCKER=0
 where docker >nul 2>&1
 if not errorlevel 1 (
-  set USE_DOCKER=1
-  echo [3/6] Docker detectado. Iniciando PostgreSQL local ^(puerto 5544^)...
-  docker compose up -d --wait
-  if errorlevel 1 (
-    docker compose up -d
+  findstr /C:"5544" backend\.env >nul 2>&1
+  if not errorlevel 1 (
     set USE_DOCKER=1
-    echo [4/6] Esperando que PostgreSQL este listo...
-    timeout /t 12 /nobreak >nul
-  ) else (
-    set USE_DOCKER=1
-    echo [4/6] PostgreSQL listo.
+    echo [3/6] Docker detectado. Iniciando PostgreSQL local ^(puerto 5544^)...
+    docker compose up -d --wait
+    if errorlevel 1 (
+      docker compose up -d
+      set USE_DOCKER=1
+      echo [4/6] Esperando que PostgreSQL este listo...
+      timeout /t 12 /nobreak >nul
+    ) else (
+      set USE_DOCKER=1
+      echo [4/6] PostgreSQL listo.
+    )
   )
 )
 
 if "%USE_DOCKER%"=="0" (
-  echo [3/6] Sin Docker. Usando PostgreSQL instalado en Windows.
+  echo [3/6] PostgreSQL nativo ^(puerto 5432, base turnos_dispensario^).
   echo.
-  echo Si aun no lo instalo, siga los pasos del README.md seccion:
-  echo "PostgreSQL en Windows ^(sin Docker^)"
+  echo Si aun no creo usuario y base en pgAdmin, vea:
+  echo   deploy\windows\SERVIDOR-192.168.20.26.md
   echo.
-  echo DATABASE_URL actual en backend\.env:
+  echo DATABASE_URL actual:
   type backend\.env | findstr DATABASE_URL
   echo.
   pause
@@ -73,9 +80,15 @@ echo ============================================
 echo.
 echo Base de datos: LOCAL ^(gratis, sin suscripciones^)
 echo Aplicacion:    puerto 8741
-if "%USE_DOCKER%"=="1" echo PostgreSQL:    127.0.0.1:5544 ^(Docker^)
+if "%USE_DOCKER%"=="1" (
+  echo PostgreSQL:    127.0.0.1:5544 ^(Docker^)
+) else (
+  echo PostgreSQL:    127.0.0.1:5432 ^(nativo, base turnos_dispensario^)
+  echo Servidor red:   http://192.168.20.26:8741
+)
 echo.
 echo Para iniciar: deploy\windows\2-iniciar.bat
+echo Guia servidor: deploy\windows\SERVIDOR-192.168.20.26.md
 echo.
 pause
 exit /b 0

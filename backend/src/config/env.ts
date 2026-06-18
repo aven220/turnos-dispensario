@@ -24,4 +24,6 @@ export const env = {
   CORS_ORIGIN: parseCorsOrigin(),
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',
+  /** IP o hostname que usan los clientes en la red (ej. 192.168.20.26) */
+  PUBLIC_SERVER_IP: process.env.PUBLIC_SERVER_IP?.trim() || '',
 };

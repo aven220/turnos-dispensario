@@ -24,6 +24,13 @@ if not errorlevel 1 (
 
 set NODE_ENV=production
 
+for /f "usebackq tokens=1,* delims==" %%a in (`findstr /B "PORT=" backend\.env 2^>nul`) do set APP_PORT=%%b
+for /f "usebackq tokens=1,* delims==" %%a in (`findstr /B "PUBLIC_SERVER_IP=" backend\.env 2^>nul`) do set SERVER_IP=%%b
+set APP_PORT=%APP_PORT:"=%
+set SERVER_IP=%SERVER_IP:"=%
+if not defined APP_PORT set APP_PORT=8741
+if not defined SERVER_IP set SERVER_IP=SU-IP
+
 echo.
 echo Compilando aplicacion...
 call npm run build
@@ -38,16 +45,22 @@ echo ============================================
 echo   Turnos Dispensario en ejecucion
 echo ============================================
 echo   Base de datos: LOCAL
-echo   Login:         http://localhost:8741
-echo   Admin:         http://localhost:8741/admin
-echo   Filtro:        http://localhost:8741/filtro
-echo   Ventanilla:    http://localhost:8741/ventanilla
+echo   Login:         http://localhost:%APP_PORT%
+if not "%SERVER_IP%"=="SU-IP" (
+  echo   Red ^(IP servidor^): http://%SERVER_IP%:%APP_PORT%
+)
+echo   Admin:         http://localhost:%APP_PORT%/admin
+echo   Filtro:        http://localhost:%APP_PORT%/filtro
+echo   Ventanilla:    http://localhost:%APP_PORT%/ventanilla
 echo.
-echo   Pantalla TV ^(solo en el navegador de la TV^):
-echo   http://localhost:8741/tv
-echo   Red local:     http://SU-IP:8741/tv
+echo   Pantalla TV:
+if not "%SERVER_IP%"=="SU-IP" (
+  echo   http://%SERVER_IP%:%APP_PORT%/tv
+) else (
+  echo   http://localhost:%APP_PORT%/tv
+)
 echo.
-echo   Salud:         http://localhost:8741/api/health
+echo   Salud:         http://localhost:%APP_PORT%/api/health
 echo   Ctrl+C para detener.
 echo ============================================
 echo.

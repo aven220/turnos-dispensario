@@ -72,8 +72,15 @@ async function bootstrap() {
     const hostLabel = env.HOST === '0.0.0.0' ? 'todas las interfaces' : env.HOST;
     console.log(`Servidor listo en puerto ${env.PORT} (${hostLabel})`);
     if (env.isProduction) {
-      console.log(`Acceso local: http://localhost:${env.PORT}`);
-      console.log(`Pantalla TV:  http://localhost:${env.PORT}/tv`);
+      const pub = env.PUBLIC_SERVER_IP;
+      console.log(`Acceso local:   http://localhost:${env.PORT}`);
+      if (pub) {
+        console.log(`Red interna:    http://${pub}:${env.PORT}`);
+        console.log(`Pantalla TV:    http://${pub}:${env.PORT}/tv`);
+        console.log(`Salud:          http://${pub}:${env.PORT}/api/health`);
+      } else {
+        console.log(`Pantalla TV:    http://localhost:${env.PORT}/tv`);
+      }
     }
   });
 }
