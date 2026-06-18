@@ -23,10 +23,10 @@ call npm install
 if errorlevel 1 goto :error
 
 if not exist "backend\.env" (
-  echo [2/6] Creando backend\.env para servidor...
-  if exist "deploy\windows\.env.servidor.example" (
-    copy /Y "deploy\windows\.env.servidor.example" "backend\.env"
-  ) else (
+  echo [2/6] Creando backend\.env ...
+  if exist "deploy\windows\.env.servidor-docker.example" (
+    copy /Y "deploy\windows\.env.servidor-docker.example" "backend\.env"
+  ) else if exist "deploy\windows\.env.example" (
     copy /Y "deploy\windows\.env.example" "backend\.env"
   )
 ) else (
@@ -36,24 +36,27 @@ if not exist "backend\.env" (
 set USE_DOCKER=0
 where docker >nul 2>&1
 if not errorlevel 1 (
-  findstr /C:"5544" backend\.env >nul 2>&1
-  if not errorlevel 1 (
-    set USE_DOCKER=1
-    echo [3/6] Docker detectado. Iniciando PostgreSQL local ^(puerto 5544^)...
-    docker compose up -d --wait
-    if errorlevel 1 (
-      docker compose up -d
-      set USE_DOCKER=1
-      echo [4/6] Esperando que PostgreSQL este listo...
-      timeout /t 12 /nobreak >nul
-    ) else (
-      set USE_DOCKER=1
-      echo [4/6] PostgreSQL listo.
-    )
-  )
+  docker info >nul 2>&1
+  if not errorlevel 1 set USE_DOCKER=1
 )
 
-if "%USE_DOCKER%"=="0" (
+if "%USE_DOCKER%"=="1" (
+  findstr /C:"5544" backend\.env >nul 2>&1
+  if errorlevel 1 (
+    echo [AVISO] backend\.env no usa puerto 5544. Para Docker ejecute:
+    echo   deploy\windows\5-configurar-servidor-docker.bat
+    echo   deploy\windows\1-instalar-docker.bat
+    echo.
+  )
+  echo [3/6] Iniciando PostgreSQL en Docker ^(puerto 5544^)...
+  docker compose up -d postgres --wait
+  if errorlevel 1 (
+    docker compose up -d postgres
+    echo Esperando PostgreSQL...
+    timeout /t 15 /nobreak >nul
+  )
+  echo [4/6] PostgreSQL Docker listo.
+) else (
   echo [3/6] PostgreSQL nativo ^(puerto 5432, base turnos_dispensario^).
   echo.
   echo Si aun no creo usuario y base en pgAdmin, vea:
@@ -87,8 +90,9 @@ if "%USE_DOCKER%"=="1" (
   echo Servidor red:   http://192.168.20.26:8741
 )
 echo.
-echo Para iniciar: deploy\windows\2-iniciar.bat
-echo Guia servidor: deploy\windows\SERVIDOR-192.168.20.26.md
+echo Para iniciar con Docker: deploy\windows\2-iniciar-docker.bat
+echo Guia Docker:          deploy\windows\SERVIDOR-DOCKER-192.168.20.26.md
+echo Para iniciar sin Docker app: deploy\windows\2-iniciar.bat
 echo.
 pause
 exit /b 0

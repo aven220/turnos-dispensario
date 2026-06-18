@@ -1,22 +1,23 @@
 @echo off
 chcp 65001 >nul
-title Turnos Dispensario - Detener base de datos
+title Turnos Dispensario - Detener
 
 cd /d "%~dp0..\.."
 
 where docker >nul 2>&1
-if errorlevel 1 (
-  echo PostgreSQL instalado en Windows: no se detiene desde aqui.
-  echo Use "Servicios de Windows" si necesita detenerlo.
-  goto :done
+if not errorlevel 1 (
+  docker compose ps --format "{{.Name}}" 2>nul | findstr /I "turnos-app turnos-postgres" >nul 2>&1
+  if not errorlevel 1 (
+    echo Deteniendo contenedores Docker...
+    docker compose down
+    goto :done
+  )
 )
 
-echo Deteniendo PostgreSQL local de Turnos ^(solo Docker^)...
-docker compose down
+echo PostgreSQL nativo: use Servicios de Windows si necesita detenerlo.
+echo App sin Docker: cierre la ventana de 2-iniciar.bat con Ctrl+C.
 
 :done
 echo.
-echo La aplicacion se detiene con Ctrl+C en la ventana de 2-iniciar.bat.
-echo Sus datos locales se conservan.
-echo.
+echo Datos conservados.
 pause

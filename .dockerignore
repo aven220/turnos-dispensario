@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+frontend/dist
+backend/dist
+.git
+.env
+backend/.env
+*.md
+deploy
+.cursor
+terminals

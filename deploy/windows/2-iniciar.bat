@@ -13,14 +13,22 @@ if not exist "backend\.env" (
 
 where docker >nul 2>&1
 if not errorlevel 1 (
-  echo Iniciando PostgreSQL local...
-  docker compose up -d --wait
-  if errorlevel 1 (
-    echo [AVISO] No se pudo verificar Docker. Continuando...
-    docker compose up -d
-    timeout /t 10 /nobreak >nul
+  docker info >nul 2>&1
+  if not errorlevel 1 (
+    docker compose ps --format "{{.Name}}" 2>nul | findstr /I "turnos-app" >nul 2>&1
+    if not errorlevel 1 (
+      echo [INFO] La app ya corre en Docker. Use 2-iniciar-docker.bat o docker compose up -d
+      goto :after_docker
+    )
+    echo Iniciando PostgreSQL Docker...
+    docker compose up -d postgres --wait
+    if errorlevel 1 (
+      docker compose up -d postgres
+      timeout /t 10 /nobreak >nul
+    )
   )
 )
+:after_docker
 
 set NODE_ENV=production
 

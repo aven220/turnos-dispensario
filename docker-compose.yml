@@ -1,6 +1,12 @@
-# PostgreSQL LOCAL gratuito — aislado, sin suscripciones.
-# Solo escucha en 127.0.0.1:5544 (no interfiere con otros programas).
-# Uso: docker compose up -d
+# Turnos Dispensario — Docker Compose (produccion)
+#
+# PostgreSQL en 127.0.0.1:5544 (no choca con PostgreSQL nativo en 5432)
+# Aplicacion en 0.0.0.0:8741
+#
+# Uso:
+#   docker compose up -d --build
+#   docker compose logs -f app
+#   docker compose down
 
 services:
   postgres:
@@ -21,6 +27,39 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - turnos
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: turnos-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://turnos:TdCencoic2026Disp@postgres:5432/turnos_dispensario?schema=public
+      JWT_SECRET: cencoic-turnos-jwt-2026-k8mP2xQ9vL4nR7wZ6sH3fA1bN5jD0eU
+      JWT_EXPIRES_IN: 12h
+      PORT: 8741
+      HOST: 0.0.0.0
+      CORS_ORIGIN: '*'
+      NODE_ENV: production
+      PUBLIC_SERVER_IP: ${PUBLIC_SERVER_IP:-192.168.20.26}
+      SEED_ON_START: ${SEED_ON_START:-false}
+    ports:
+      - "8741:8741"
+    volumes:
+      - turnos_uploads:/app/backend/uploads
+    networks:
+      - turnos
+
+networks:
+  turnos:
+    driver: bridge
 
 volumes:
   turnos_pg_data:
+  turnos_uploads:

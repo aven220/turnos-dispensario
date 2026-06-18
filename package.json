@@ -12,6 +12,10 @@
     "db:migrate": "npm run db:migrate --workspace=backend",
     "db:deploy": "npm run db:deploy --workspace=backend",
     "db:seed": "npm run db:seed --workspace=backend",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
     "health": "node -e \"fetch('http://localhost:'+(process.env.PORT||8741)+'/api/health').then(r=>r.json()).then(console.log).catch(console.error)\""
   },
   "workspaces": [
