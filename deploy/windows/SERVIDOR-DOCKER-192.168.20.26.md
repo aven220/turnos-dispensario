@@ -81,9 +81,20 @@ deploy\windows\1-instalar-docker.bat
 
 Hace: build imagen → PostgreSQL → migraciones → usuarios iniciales → arranca app.
 
-### 5. Firewall
+### 5. Firewall (obligatorio para acceso desde la red)
 
-Permitir **TCP 8741** entrada (red privada).
+Desde **otro PC** no entrará si Windows bloquea el puerto. Ejecute **como Administrador**:
+
+```cmd
+deploy\windows\7-abrir-firewall.bat
+```
+
+PowerShell (admin):
+```powershell
+.\deploy\windows\7-abrir-firewall.ps1
+```
+
+O manual: Firewall de Windows → Reglas de entrada → Nueva → TCP **8741** → Permitir (red privada).
 
 ### 6. Probar
 
