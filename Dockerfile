@@ -31,10 +31,10 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/backend ./backend
 COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
-
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 WORKDIR /app/backend
+RUN npx prisma generate
 
 EXPOSE 8741
 

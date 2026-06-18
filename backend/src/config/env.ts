@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+
+// En Docker/produccion las variables vienen del entorno, no de backend/.env
+if (process.env.NODE_ENV !== 'production') {
+  config();
+}
 
 function required(name: string): string {
   const value = process.env[name];
