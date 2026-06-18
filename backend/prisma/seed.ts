@@ -1,17 +1,19 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('CencoicAdmin2026', 10);
+  const adminPassword = await bcrypt.hash('CencoicAdmin2026', 10);
+  const filterPassword = await bcrypt.hash('CencoicFiltro2026', 10);
+  const windowPassword = await bcrypt.hash('CencoicVent2026', 10);
 
   const admin = await prisma.user.upsert({
     where: { username: 'admin' },
-    update: {},
+    update: { passwordHash: adminPassword, status: UserStatus.ACTIVE },
     create: {
       username: 'admin',
-      passwordHash,
+      passwordHash: adminPassword,
       fullName: 'Administrador',
       role: UserRole.ADMIN,
     },
@@ -19,10 +21,10 @@ async function main() {
 
   const filter = await prisma.user.upsert({
     where: { username: 'filtro' },
-    update: {},
+    update: { passwordHash: filterPassword, status: UserStatus.ACTIVE },
     create: {
       username: 'filtro',
-      passwordHash: await bcrypt.hash('CencoicFiltro2026', 10),
+      passwordHash: filterPassword,
       fullName: 'Operador Filtro',
       role: UserRole.FILTER,
     },
@@ -30,10 +32,10 @@ async function main() {
 
   const maria = await prisma.user.upsert({
     where: { username: 'maria' },
-    update: {},
+    update: { passwordHash: windowPassword, status: UserStatus.ACTIVE },
     create: {
       username: 'maria',
-      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
+      passwordHash: windowPassword,
       fullName: 'María Gómez',
       role: UserRole.WINDOW,
     },
@@ -41,10 +43,10 @@ async function main() {
 
   const juan = await prisma.user.upsert({
     where: { username: 'juan' },
-    update: {},
+    update: { passwordHash: windowPassword, status: UserStatus.ACTIVE },
     create: {
       username: 'juan',
-      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
+      passwordHash: windowPassword,
       fullName: 'Juan Pérez',
       role: UserRole.WINDOW,
     },
@@ -52,10 +54,10 @@ async function main() {
 
   const carlos = await prisma.user.upsert({
     where: { username: 'carlos' },
-    update: {},
+    update: { passwordHash: windowPassword, status: UserStatus.ACTIVE },
     create: {
       username: 'carlos',
-      passwordHash: await bcrypt.hash('CencoicVent2026', 10),
+      passwordHash: windowPassword,
       fullName: 'Carlos Ruiz',
       role: UserRole.WINDOW,
     },

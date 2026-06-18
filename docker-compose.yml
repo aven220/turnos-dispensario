@@ -50,7 +50,7 @@ services:
       PUBLIC_SERVER_IP: ${PUBLIC_SERVER_IP:-192.168.20.26}
       SEED_ON_START: ${SEED_ON_START:-false}
     ports:
-      - "8741:8741"
+      - "0.0.0.0:8741:8741"
     volumes:
       - turnos_uploads:/app/backend/uploads
     networks:

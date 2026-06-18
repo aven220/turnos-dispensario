@@ -47,6 +47,10 @@ docker compose up -d app
 if errorlevel 1 goto :error
 
 echo.
+echo [IMPORTANTE] Para acceso desde la red ejecute como Administrador:
+echo   deploy\windows\7-abrir-firewall.bat
+
+echo.
 echo Esperando que la aplicacion arranque...
 timeout /t 20 /nobreak >nul
 
@@ -67,6 +71,8 @@ echo   PowerShell:    .\deploy\windows\2-iniciar-docker.ps1
 echo Detener:         deploy\windows\3-detener-docker.bat
 echo   PowerShell:    .\deploy\windows\3-detener-docker.ps1
 echo Logs:            docker compose logs -f app
+echo Recrear usuarios: deploy\windows\8-recrear-usuarios.bat
+echo Diagnostico:      deploy\windows\9-diagnostico.bat
 echo.
 pause
 exit /b 0
