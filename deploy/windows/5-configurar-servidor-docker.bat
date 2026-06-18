@@ -21,8 +21,17 @@ if errorlevel 1 (
 )
 
 if exist "backend\.env" (
+  findstr /C:"5432" backend\.env >nul 2>&1
+  if not errorlevel 1 (
+    findstr /C:"5544" backend\.env >nul 2>&1
+    if errorlevel 1 (
+      echo [AVISO] backend\.env usa puerto 5432. Para Docker ejecute:
+      echo   deploy\windows\FIX-DATABASE-DOCKER.bat
+      echo.
+    )
+  )
   echo Ya existe backend\.env
-  choice /C SN /M "Desea reemplazarlo con la configuracion Docker"
+  choice /C SN /M "Desea reemplazarlo con la configuracion Docker (puerto 5544)"
   if errorlevel 2 (
     echo Cancelado.
     pause
