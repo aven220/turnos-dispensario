@@ -101,6 +101,7 @@ export interface TicketPrintSettings {
   showDateTime: boolean;
   showFooter: boolean;
   footerMessage: string;
+  messageFontScale: number;
 }
 
 export interface TvDisplay {

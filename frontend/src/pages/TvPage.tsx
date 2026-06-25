@@ -18,18 +18,16 @@ function RecentCallRow({ ticket }: { ticket: Ticket }) {
   return (
     <div className="flex items-center justify-between gap-3 sm:gap-4 bg-slate-800/60 border border-slate-600 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 min-w-0">
       <p className="font-black text-yellow-300 shrink-0 text-[clamp(1rem,4vmin,1.5rem)]">{ticket.displayCode}</p>
+      <p className="text-slate-400 font-semibold text-[clamp(0.7rem,2vmin,0.875rem)] uppercase shrink-0">
+        {ticket.priority.code}
+      </p>
       <p className="text-emerald-400 font-semibold text-[clamp(0.8rem,2.5vmin,1rem)] truncate">
-        Ventanilla {ticket.window?.number}
+        Vent. {ticket.window?.number}
       </p>
     </div>
   );
 }
 
-function getOperatorName(ticket: Ticket): string | null {
-  return ticket.window?.sessions?.[0]?.user.fullName ?? null;
-}
-
-/** Escala estándar (1) con 1 ventanilla; baja gradualmente hasta ~0.72 con 9. */
 function getAttendingScale(count: number): number {
   if (count <= 1) return 1;
   return Math.max(0.72, 1 - (count - 1) * 0.035);
@@ -51,15 +49,15 @@ function AttendingSection({ tickets }: { tickets: Ticket[] }) {
               className="flex items-center justify-between gap-3 sm:gap-4 bg-slate-800/60 border border-slate-600 rounded-xl px-3 py-3 sm:px-5 sm:py-4 min-w-0"
             >
               <div className="min-w-0">
-                <p className="text-slate-200 font-semibold text-[clamp(0.875rem,2.5vw,1.125rem)] truncate">
-                  {getOperatorName(t) ?? 'Operador'}
+                <p className="font-black text-yellow-300 text-[clamp(1.25rem,5vmin,1.875rem)] leading-none">
+                  {t.displayCode}
                 </p>
-                <p className="text-emerald-400 uppercase tracking-wide font-semibold text-[clamp(0.75rem,2.5vw,0.875rem)] mt-0.5 sm:mt-1 truncate">
+                <p className="text-emerald-400 uppercase tracking-wide font-semibold text-[clamp(0.75rem,2.5vw,0.875rem)] mt-1 sm:mt-2 truncate">
                   Ventanilla {t.window?.number}
                 </p>
               </div>
-              <p className="font-black text-yellow-300 shrink-0 text-[clamp(1.25rem,5vmin,1.875rem)]">
-                {t.displayCode}
+              <p className="text-slate-400 font-bold shrink-0 text-[clamp(0.875rem,2.5vw,1.125rem)] uppercase">
+                {t.priority.code}
               </p>
             </div>
           ))}
@@ -221,6 +219,9 @@ export function TvPage() {
                 </p>
                 <p className="mt-2 sm:mt-4 text-emerald-400 text-[clamp(1.125rem,4vmin,1.875rem)]">
                   Ventanilla {highlighted.ticket.window?.number}
+                </p>
+                <p className="mt-1 text-slate-400 uppercase tracking-widest text-[clamp(0.875rem,2.5vmin,1.25rem)] font-bold">
+                  {highlighted.ticket.priority.code}
                 </p>
                 {highlighted.ticket.callCount > 1 && (
                   <p className="mt-2 text-amber-300/80 text-[clamp(0.7rem,1.8vmin,0.875rem)] uppercase tracking-wide">

@@ -17,7 +17,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f app",
-    "health": "node -e \"fetch('http://localhost:'+(process.env.PORT||8741)+'/api/health').then(r=>r.json()).then(console.log).catch(console.error)\""
+    "health": "node -e \"fetch('http://localhost:'+(process.env.PORT||8741)+'/api/health').then(r=>r.json()).then(console.log).catch(console.error)\"",
+    "qa:flow": "node scripts/qa-flow.mjs"
   },
   "workspaces": [
     "backend",

@@ -36,6 +36,7 @@ export function buildTicketPrintHtml(
   const autoPrint = options?.autoPrint ?? false;
   const preview = options?.preview ?? false;
   const dateTime = formatDateTime(ticket.createdAt);
+  const msgScale = Math.min(2.5, Math.max(0.8, settings.messageFontScale ?? 1));
 
   const blocks: string[] = [];
 
@@ -43,7 +44,7 @@ export function buildTicketPrintHtml(
     blocks.push(`<div class="header">${escapeHtml(settings.headerTitle)}</div>`);
   }
   if (settings.showPriority) {
-    blocks.push(`<div class="priority">${escapeHtml(ticket.priority.name)}</div>`);
+    blocks.push(`<div class="priority">${escapeHtml(ticket.priority.code)}</div>`);
   }
   if (settings.showDisplayCode) {
     blocks.push(`<div class="code">${escapeHtml(ticket.displayCode)}</div>`);
@@ -84,7 +85,7 @@ export function buildTicketPrintHtml(
       padding: 20px 12px;
     }
     .header {
-      font-size: 18px;
+      font-size: ${18 * msgScale}px;
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -92,7 +93,7 @@ export function buildTicketPrintHtml(
       color: #1e40af;
     }
     .priority {
-      font-size: 14px;
+      font-size: ${14 * msgScale}px;
       font-weight: 600;
       color: #475569;
       margin-bottom: 8px;
@@ -117,7 +118,7 @@ export function buildTicketPrintHtml(
       margin-top: 8px;
     }
     .footer {
-      font-size: 12px;
+      font-size: ${12 * msgScale}px;
       color: #334155;
       margin-top: 16px;
       padding-top: 12px;

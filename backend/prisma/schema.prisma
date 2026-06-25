@@ -218,6 +218,7 @@ model TicketPrintSettings {
   showDateTime    Boolean @default(true) @map("show_date_time")
   showFooter      Boolean @default(true) @map("show_footer")
   footerMessage   String  @default("Espere a ser llamado en pantalla") @map("footer_message")
+  messageFontScale Float  @default(1) @map("message_font_scale")
 
   @@map("ticket_print_settings")
 }

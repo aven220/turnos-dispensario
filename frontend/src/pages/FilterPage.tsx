@@ -16,6 +16,7 @@ const DEFAULT_PRINT_SETTINGS: TicketPrintSettings = {
   showDateTime: true,
   showFooter: true,
   footerMessage: 'Espere a ser llamado en pantalla',
+  messageFontScale: 1,
 };
 
 export function FilterPage() {
@@ -83,7 +84,7 @@ export function FilterPage() {
 
           {lastTicket && (
             <div className="mt-6 p-6 bg-blue-50 rounded-xl text-center">
-              <p className="text-sm text-blue-600">{lastTicket.priority.name}</p>
+              <p className="text-sm text-blue-600 font-semibold uppercase">{lastTicket.priority.code}</p>
               <p className="text-5xl font-bold text-blue-900 my-2">{lastTicket.displayCode}</p>
               <Button variant="secondary" onClick={() => openTicketPrint(lastTicket, printSettings)}>Imprimir</Button>
             </div>
@@ -97,7 +98,7 @@ export function FilterPage() {
               <div key={t.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                 <div>
                   <span className="font-bold text-lg">{t.displayCode}</span>
-                  <span className="ml-2 text-sm text-slate-500">{t.priority.name}</span>
+                  <span className="ml-2 text-sm text-slate-500 font-semibold uppercase">{t.priority.code}</span>
                   <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
                     t.status === 'GENERADO' ? 'bg-yellow-100 text-yellow-800' :
                     t.status === 'FINALIZADO' ? 'bg-green-100 text-green-800' :

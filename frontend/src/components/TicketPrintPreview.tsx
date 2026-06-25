@@ -8,6 +8,8 @@ interface TicketPrintPreviewProps {
 }
 
 export function TicketPrintPreview({ settings, sampleTicket = SAMPLE_TICKET }: TicketPrintPreviewProps) {
+  const msgScale = Math.min(2.5, Math.max(0.8, settings.messageFontScale ?? 1));
+
   function handlePrint() {
     const printWindow = window.open('', '_blank', 'width=420,height=640');
     if (!printWindow) {
@@ -39,12 +41,20 @@ export function TicketPrintPreview({ settings, sampleTicket = SAMPLE_TICKET }: T
 
       <div className="mx-auto max-w-xs bg-white border-2 border-dashed border-slate-300 rounded-lg p-5 text-center shadow-sm">
         {settings.showHeader && (
-          <p className="text-base font-bold tracking-[0.12em] text-blue-800 uppercase mb-3">
+          <p
+            className="font-bold tracking-[0.12em] text-blue-800 uppercase mb-3"
+            style={{ fontSize: `${18 * msgScale}px` }}
+          >
             {settings.headerTitle}
           </p>
         )}
         {settings.showPriority && (
-          <p className="text-sm font-semibold text-slate-600 uppercase mb-2">{sampleTicket.priority.name}</p>
+          <p
+            className="font-semibold text-slate-600 uppercase mb-2"
+            style={{ fontSize: `${14 * msgScale}px` }}
+          >
+            {sampleTicket.priority.code}
+          </p>
         )}
         {settings.showDisplayCode && (
           <p className="text-5xl font-black text-slate-900 my-3 leading-none">{sampleTicket.displayCode}</p>
@@ -56,7 +66,10 @@ export function TicketPrintPreview({ settings, sampleTicket = SAMPLE_TICKET }: T
           <p className="text-sm text-slate-600 mt-2">{dateTime}</p>
         )}
         {settings.showFooter && (
-          <p className="text-xs text-slate-700 mt-4 pt-3 border-t border-dashed border-slate-300 leading-relaxed">
+          <p
+            className="text-slate-700 mt-4 pt-3 border-t border-dashed border-slate-300 leading-relaxed"
+            style={{ fontSize: `${12 * msgScale}px` }}
+          >
             {settings.footerMessage}
           </p>
         )}

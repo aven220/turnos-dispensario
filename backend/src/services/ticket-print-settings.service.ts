@@ -11,6 +11,7 @@ const defaults = {
   showDateTime: true,
   showFooter: true,
   footerMessage: 'Espere a ser llamado en pantalla',
+  messageFontScale: 1,
 };
 
 export async function getTicketPrintSettings() {

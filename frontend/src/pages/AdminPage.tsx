@@ -23,6 +23,7 @@ const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   showDateTime: true,
   showFooter: true,
   footerMessage: 'Espere a ser llamado en pantalla',
+  messageFontScale: 1,
 };
 
 export function AdminPage() {
@@ -110,6 +111,7 @@ export function AdminPage() {
           showDateTime: ticketPrintDraft.showDateTime,
           showFooter: ticketPrintDraft.showFooter,
           footerMessage: ticketPrintDraft.footerMessage.trim(),
+          messageFontScale: ticketPrintDraft.messageFontScale ?? 1,
         }),
       });
       setTicketPrintSettings(settings);
@@ -1018,19 +1020,43 @@ export function AdminPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">Mensaje inferior</label>
                 <textarea
-                  className="w-full border rounded-lg px-3 py-2"
-                  rows={2}
+                  className="w-full border rounded-lg px-3 py-2 resize-y min-h-[4rem]"
+                  rows={4}
                   value={ticketPrintDraft.footerMessage}
                   onChange={(e) => updateTicketPrintField('footerMessage', e.target.value)}
                   maxLength={200}
                   disabled={!ticketPrintDraft.showFooter}
                 />
+                <p className="text-xs text-slate-400 mt-1">Arrastre la esquina inferior para ampliar el área de edición.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Tamaño mensajes del ticket (título, código prioridad, pie)
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="range"
+                    min={0.8}
+                    max={2.5}
+                    step={0.05}
+                    value={ticketPrintDraft.messageFontScale ?? 1}
+                    onChange={(e) => updateTicketPrintField('messageFontScale', parseFloat(e.target.value))}
+                    className="flex-1 min-w-[160px]"
+                  />
+                  <span className="text-sm font-mono text-slate-600 w-14 text-right">
+                    {Math.round((ticketPrintDraft.messageFontScale ?? 1) * 100)}%
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  El número de turno mantiene su tamaño. Solo escala título, código de prioridad y mensaje inferior.
+                </p>
               </div>
 
               <div className="space-y-2 pt-2">
                 {[
                   { key: 'showHeader' as const, label: 'Mostrar título superior' },
-                  { key: 'showPriority' as const, label: 'Mostrar prioridad (ej. Prioritario)' },
+                  { key: 'showPriority' as const, label: 'Mostrar código de prioridad (ej. PRI, GEN)' },
                   { key: 'showDisplayCode' as const, label: 'Mostrar número de turno (ej. PRI001)' },
                   { key: 'showUniqueCode' as const, label: 'Mostrar código interno completo' },
                   { key: 'showDateTime' as const, label: 'Mostrar fecha y hora' },

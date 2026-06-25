@@ -52,6 +52,7 @@ router.patch('/print-settings', requireRoles(UserRole.ADMIN), async (req, res, n
         showDateTime: z.boolean().optional(),
         showFooter: z.boolean().optional(),
         footerMessage: z.string().min(1).max(200).optional(),
+        messageFontScale: z.coerce.number().min(0.8).max(2.5).optional(),
       })
       .parse({
         ...req.body,
