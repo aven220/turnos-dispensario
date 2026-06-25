@@ -47,6 +47,8 @@ export function AdminPage() {
   const [upcomingCount, setUpcomingCount] = useState(3);
   const [windowQueueCount, setWindowQueueCount] = useState(3);
   const [welcomeMessage, setWelcomeMessage] = useState('BIENVENIDOS A CENCOIC');
+  const [welcomeFontScale, setWelcomeFontScale] = useState(1);
+  const [tickerFontScale, setTickerFontScale] = useState(1);
   const [speechRate, setSpeechRate] = useState(0.9);
   const [speechVoice, setSpeechVoice] = useState('google');
   const [userError, setUserError] = useState('');
@@ -87,6 +89,8 @@ export function AdminPage() {
     setUpcomingCount(settings.upcomingCount);
     setWindowQueueCount(settings.windowQueueCount);
     setWelcomeMessage(settings.welcomeMessage);
+    setWelcomeFontScale(settings.welcomeFontScale ?? 1);
+    setTickerFontScale(settings.tickerFontScale ?? 1);
     setSpeechRate(settings.speechRate ?? 0.9);
     setSpeechVoice(normalizeVoicePreset(settings.speechVoice));
   }
@@ -134,6 +138,8 @@ export function AdminPage() {
           upcomingCount,
           windowQueueCount,
           welcomeMessage: welcomeMessage.trim(),
+          welcomeFontScale,
+          tickerFontScale,
           speechRate,
           speechVoice,
           speechLang: 'es-ES',
@@ -141,6 +147,8 @@ export function AdminPage() {
       });
       setTvSettings(settings);
       setWelcomeMessage(settings.welcomeMessage);
+      setWelcomeFontScale(settings.welcomeFontScale ?? 1);
+      setTickerFontScale(settings.tickerFontScale ?? 1);
       setSpeechRate(settings.speechRate);
       setSpeechVoice(normalizeVoicePreset(settings.speechVoice));
       setUpcomingCount(settings.upcomingCount);
@@ -476,6 +484,8 @@ export function AdminPage() {
     tvSettings?.upcomingCount !== upcomingCount ||
     tvSettings?.windowQueueCount !== windowQueueCount ||
     tvSettings?.welcomeMessage !== welcomeMessage.trim() ||
+    (tvSettings?.welcomeFontScale ?? 1) !== welcomeFontScale ||
+    (tvSettings?.tickerFontScale ?? 1) !== tickerFontScale ||
     tvSettings?.speechRate !== speechRate ||
     normalizeVoicePreset(tvSettings?.speechVoice) !== normalizeVoicePreset(speechVoice);
 
@@ -818,6 +828,50 @@ export function AdminPage() {
                   maxLength={120}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Tamaño mensaje superior en TV
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={2.5}
+                    step={0.05}
+                    value={welcomeFontScale}
+                    onChange={(e) => setWelcomeFontScale(parseFloat(e.target.value))}
+                    className="flex-1 min-w-[160px]"
+                  />
+                  <span className="text-sm font-mono text-slate-600 w-14 text-right">
+                    {Math.round(welcomeFontScale * 100)}%
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Ajusta el saludo de la franja azul superior. No modifica turnos ni multimedia.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Tamaño ticker inferior en TV (mensajes deslizantes)
+                </label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={2.5}
+                    step={0.05}
+                    value={tickerFontScale}
+                    onChange={(e) => setTickerFontScale(parseFloat(e.target.value))}
+                    className="flex-1 min-w-[160px]"
+                  />
+                  <span className="text-sm font-mono text-slate-600 w-14 text-right">
+                    {Math.round(tickerFontScale * 100)}%
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Ajusta la barra inferior con animación. Véalo en la vista previa de abajo.
+                </p>
+              </div>
               <div className="flex flex-wrap items-end gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Próximos turnos en TV</label>
@@ -911,6 +965,8 @@ export function AdminPage() {
               <TickerPreview
                 tickerText={tickerPreviewText}
                 welcomeMessage={welcomeMessage.trim() || 'BIENVENIDOS A CENCOIC'}
+                welcomeFontScale={welcomeFontScale}
+                tickerFontScale={tickerFontScale}
               />
             </Card>
 

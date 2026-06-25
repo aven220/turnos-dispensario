@@ -10,6 +10,8 @@ export async function getTvSettings() {
       upcomingCount: 3,
       windowQueueCount: 3,
       welcomeMessage: 'BIENVENIDOS A CENCOIC',
+      welcomeFontScale: 1,
+      tickerFontScale: 1,
       speechRate: 0.9,
       speechVoice: '',
       speechLang: 'es-ES',
@@ -23,6 +25,8 @@ export async function updateTvSettings(data: {
   upcomingCount?: number;
   windowQueueCount?: number;
   welcomeMessage?: string;
+  welcomeFontScale?: number;
+  tickerFontScale?: number;
   speechRate?: number;
   speechVoice?: string;
   speechLang?: string;
@@ -34,6 +38,8 @@ export async function updateTvSettings(data: {
       upcomingCount: data.upcomingCount ?? 3,
       windowQueueCount: data.windowQueueCount ?? 3,
       welcomeMessage: data.welcomeMessage ?? 'BIENVENIDOS A CENCOIC',
+      welcomeFontScale: data.welcomeFontScale ?? 1,
+      tickerFontScale: data.tickerFontScale ?? 1,
       speechRate: data.speechRate ?? 0.9,
       speechVoice: data.speechVoice ?? '',
       speechLang: data.speechLang ?? 'es-ES',

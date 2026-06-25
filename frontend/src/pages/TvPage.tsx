@@ -6,6 +6,7 @@ import type { Ticket, TvDisplay } from '../types';
 import { buildCallMessage, enqueueCallSpeech, initSpeech, normalizeVoicePreset, setSpeechSettings } from '../utils/speech';
 import { isYoutubeUrl, youtubeEmbedUrl } from '../utils/media';
 import { removePendingCall, sortPendingCalls, upsertPendingCall } from '../utils/tvCalls';
+import { tvScaledFontSize } from '../utils/tvTypography';
 
 function announceTicket(ticket: Ticket) {
   if (!ticket.window) return;
@@ -195,13 +196,20 @@ export function TvPage() {
   const tickerText = display.ticker.map((t) => t.message).join('   ·   ');
   const upcomingCount = display.settings?.upcomingCount ?? 3;
   const welcomeMessage = display.settings?.welcomeMessage ?? 'BIENVENIDOS A CENCOIC';
+  const welcomeFontScale = display.settings?.welcomeFontScale ?? 1;
+  const tickerFontScale = display.settings?.tickerFontScale ?? 1;
+  const welcomeFontSize = tvScaledFontSize(1, 3.5, 2.25, welcomeFontScale);
+  const tickerFontSize = tvScaledFontSize(0.875, 2.5, 1.125, tickerFontScale);
   const highlightedId = highlighted?.ticket.id;
   const recentCalls = pendingCalls.filter((t) => t.id !== highlightedId);
 
   return (
     <div className="h-dvh min-h-dvh max-h-dvh bg-slate-900 text-white flex flex-col overflow-hidden">
       <header className="shrink-0 bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-b border-blue-600 py-3 sm:py-4 lg:py-5 px-4 sm:px-6 text-center">
-        <h1 className="font-bold uppercase text-white text-[clamp(1rem,3.5vw,2.25rem)] tracking-[0.08em] sm:tracking-[0.15em] lg:tracking-[0.2em] leading-tight break-words">
+        <h1
+          className="font-bold uppercase text-white tracking-[0.08em] sm:tracking-[0.15em] lg:tracking-[0.2em] leading-tight break-words"
+          style={{ fontSize: welcomeFontSize }}
+        >
           {welcomeMessage}
         </h1>
       </header>
@@ -329,7 +337,10 @@ export function TvPage() {
       )}
 
       <footer className="shrink-0 bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-t border-blue-600 py-2 sm:py-3 overflow-hidden">
-        <div className="animate-marquee whitespace-nowrap font-semibold text-white tracking-wide text-[clamp(0.875rem,2.5vw,1.125rem)]">
+        <div
+          className="animate-marquee whitespace-nowrap font-semibold text-white tracking-wide"
+          style={{ fontSize: tickerFontSize }}
+        >
           <span className="inline-block px-4">{tickerText || 'Bienvenido al dispensario'}</span>
           <span className="inline-block px-4">{tickerText}</span>
         </div>

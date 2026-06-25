@@ -41,6 +41,8 @@ router.patch('/settings', async (req, res, next) => {
         upcomingCount: z.number().int().min(0).max(10).optional(),
         windowQueueCount: z.number().int().min(0).max(10).optional(),
         welcomeMessage: z.string().min(1).max(120).optional(),
+        welcomeFontScale: z.coerce.number().min(0.6).max(2.5).optional(),
+        tickerFontScale: z.coerce.number().min(0.6).max(2.5).optional(),
         speechRate: z.number().min(0.5).max(1.5).optional(),
         speechVoice: z.string().max(200).optional(),
         speechLang: z.string().min(2).max(12).optional(),

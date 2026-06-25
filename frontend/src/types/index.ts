@@ -86,6 +86,8 @@ export interface TvSettings {
   upcomingCount: number;
   windowQueueCount: number;
   welcomeMessage: string;
+  welcomeFontScale: number;
+  tickerFontScale: number;
   speechRate: number;
   speechVoice: string;
   speechLang: string;

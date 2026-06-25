@@ -1,15 +1,26 @@
 import { useRef } from 'react';
+import { tvScaledFontSize } from '../utils/tvTypography';
 import { Button } from './Layout';
 
 interface TickerPreviewProps {
   tickerText: string;
   welcomeMessage?: string;
+  welcomeFontScale?: number;
+  tickerFontScale?: number;
   showAnimation?: boolean;
 }
 
-export function TickerPreview({ tickerText, welcomeMessage, showAnimation = true }: TickerPreviewProps) {
+export function TickerPreview({
+  tickerText,
+  welcomeMessage,
+  welcomeFontScale = 1,
+  tickerFontScale = 1,
+  showAnimation = true,
+}: TickerPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const displayText = tickerText.trim() || 'Bienvenido al dispensario';
+  const welcomeSize = tvScaledFontSize(1, 3.5, 2.25, welcomeFontScale);
+  const tickerSize = tvScaledFontSize(0.875, 2.5, 1.125, tickerFontScale);
 
   function handlePrint() {
     const content = printRef.current;
@@ -36,7 +47,7 @@ export function TickerPreview({ tickerText, welcomeMessage, showAnimation = true
               color: white;
               text-align: center;
               padding: 20px 16px;
-              font-size: 22px;
+              font-size: ${welcomeSize};
               font-weight: 700;
               letter-spacing: 0.15em;
               text-transform: uppercase;
@@ -66,7 +77,7 @@ export function TickerPreview({ tickerText, welcomeMessage, showAnimation = true
               background: linear-gradient(to right, #1e40af, #1d4ed8, #1e40af);
               color: white;
               padding: 14px 16px;
-              font-size: 16px;
+              font-size: ${tickerSize};
               font-weight: 600;
               letter-spacing: 0.05em;
               border-top: 1px solid #2563eb;
@@ -109,7 +120,10 @@ export function TickerPreview({ tickerText, welcomeMessage, showAnimation = true
       <div ref={printRef} className="rounded-xl overflow-hidden border-2 border-slate-700 bg-slate-900">
         {welcomeMessage && (
           <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-b border-blue-600 py-3 px-4 text-center">
-            <p className="text-sm font-bold tracking-[0.15em] text-white uppercase truncate">
+            <p
+              className="font-bold tracking-[0.15em] text-white uppercase break-words leading-tight"
+              style={{ fontSize: welcomeSize }}
+            >
               {welcomeMessage}
             </p>
           </div>
@@ -121,12 +135,18 @@ export function TickerPreview({ tickerText, welcomeMessage, showAnimation = true
 
         <div className="bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-t border-blue-600 py-3 overflow-hidden">
           {showAnimation ? (
-            <div className="ticker-marquee whitespace-nowrap text-sm font-semibold text-white tracking-wide">
+            <div
+              className="ticker-marquee whitespace-nowrap font-semibold text-white tracking-wide"
+              style={{ fontSize: tickerSize }}
+            >
               <span className="inline-block px-4">{displayText}</span>
               <span className="inline-block px-4">{displayText}</span>
             </div>
           ) : (
-            <p className="text-sm font-semibold text-white tracking-wide px-4 text-center break-words">
+            <p
+              className="font-semibold text-white tracking-wide px-4 text-center break-words"
+              style={{ fontSize: tickerSize }}
+            >
               {displayText}
             </p>
           )}
