@@ -1,6 +1,7 @@
 import { Prisma, TicketStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { datePrefixToLabel, formatDisplayCode, formatUniqueCode, parseDatePrefix, todayPrefix } from '../utils/date.js';
+import { orderedWindowPriorityIds, sortTicketsByWindowPriority, windowPriorityInclude } from '../utils/window-priority-order.js';
 import { ensureDailyOperations } from './daily-reset.service.js';
 import { logAudit } from './audit.service.js';
 
@@ -74,15 +75,10 @@ export class TicketService {
 
     const window = await prisma.window.findUniqueOrThrow({
       where: { id: windowId },
-      include: {
-        priorities: {
-          include: { priority: true },
-          orderBy: { priority: { sortOrder: 'asc' } },
-        },
-      },
+      include: windowPriorityInclude,
     });
 
-    const priorityIds = window.priorities.map((wp) => wp.priorityId);
+    const priorityIds = orderedWindowPriorityIds(window);
     if (priorityIds.length === 0) {
       throw new Error('La ventanilla no tiene prioridades configuradas');
     }
@@ -444,17 +440,12 @@ export class TicketService {
 
     const window = await prisma.window.findUnique({
       where: { id: windowId },
-      include: {
-        priorities: {
-          include: { priority: true },
-          orderBy: { priority: { sortOrder: 'asc' } },
-        },
-      },
+      include: windowPriorityInclude,
     });
 
     if (!window?.priorities.length) return [];
 
-    const priorityIds = window.priorities.map((wp) => wp.priorityId);
+    const priorityIds = orderedWindowPriorityIds(window);
     const tickets = await prisma.ticket.findMany({
       where: {
         status: TicketStatus.GENERADO,
@@ -462,11 +453,9 @@ export class TicketService {
         priorityId: { in: priorityIds },
       },
       include: { priority: true },
-      orderBy: [{ priority: { sortOrder: 'asc' } }, { createdAt: 'asc' }],
-      take: limit,
     });
 
-    return tickets;
+    return sortTicketsByWindowPriority(tickets, priorityIds).slice(0, limit);
   }
 
   async countPendingForWindow(windowId: string) {
@@ -475,12 +464,12 @@ export class TicketService {
 
     const window = await prisma.window.findUnique({
       where: { id: windowId },
-      include: { priorities: { select: { priorityId: true } } },
+      include: { priorities: { select: { priorityId: true, sortOrder: true } } },
     });
 
     if (!window?.priorities.length) return 0;
 
-    const priorityIds = window.priorities.map((wp) => wp.priorityId);
+    const priorityIds = orderedWindowPriorityIds(window);
     return prisma.ticket.count({
       where: {
         status: TicketStatus.GENERADO,

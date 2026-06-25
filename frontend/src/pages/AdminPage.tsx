@@ -699,17 +699,19 @@ export function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Acomodar</label>
+                    <label className="block text-sm font-medium mb-1">Acomodar (referencia)</label>
                     <input
                       value={priorityDraft.sortOrder}
                       onChange={(e) => setPriorityDraft((d) => ({ ...d, sortOrder: e.target.value }))}
                       type="number"
-                      placeholder="1 = se atiende primero"
+                      placeholder="1"
                       min={1}
                       className="w-full border rounded-lg px-3 py-2"
                       required
                     />
-                    <p className="text-xs text-slate-500 mt-1">Define el orden en que se atienden los turnos de esta prioridad.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Orden global de referencia. El orden real por ventanilla se configura en la pestaña Ventanillas.
+                    </p>
                   </div>
                   {priorityError && <p className="text-red-600 text-sm">{priorityError}</p>}
                   <Button type="submit" disabled={priorityLoading}>
@@ -743,17 +745,19 @@ export function AdminPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Acomodar</label>
+                    <label className="block text-sm font-medium mb-1">Acomodar (referencia)</label>
                     <input
                       value={priorityDraft.sortOrder}
                       onChange={(e) => setPriorityDraft((d) => ({ ...d, sortOrder: e.target.value }))}
                       type="number"
-                      placeholder="1 = se atiende primero"
+                      placeholder="1"
                       min={1}
                       className="w-full border rounded-lg px-3 py-2"
                       required
                     />
-                    <p className="text-xs text-slate-500 mt-1">Define el orden en que se atienden los turnos de esta prioridad.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Orden global de referencia. El orden real por ventanilla se configura en la pestaña Ventanillas.
+                    </p>
                   </div>
                   {priorityError && <p className="text-red-600 text-sm">{priorityError}</p>}
                   <Button type="submit" disabled={priorityLoading}>
@@ -773,7 +777,7 @@ export function AdminPage() {
                 <div key={p.id} className={`flex justify-between items-center gap-2 p-3 rounded-lg ${editingPriority?.id === p.id ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
                   <div className="min-w-0">
                     <span className="font-medium">{p.name}</span>
-                    <span className="text-sm text-slate-500 ml-2">{p.code} · Acomodo {p.sortOrder}</span>
+                    <span className="text-sm text-slate-500 ml-2">{p.code} · Ref. {p.sortOrder}</span>
                     {p.isActive === false && <span className="text-xs text-red-500 ml-2">Inactiva</span>}
                     {(p._count?.tickets ?? 0) > 0 && (
                       <span className="text-xs text-amber-600 ml-2">{p._count!.tickets} turno(s)</span>

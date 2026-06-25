@@ -100,11 +100,13 @@ model WindowPriority {
   id         String @id @default(cuid())
   windowId   String @map("window_id")
   priorityId String @map("priority_id")
+  sortOrder  Int    @default(0) @map("sort_order")
 
   window   Window   @relation(fields: [windowId], references: [id], onDelete: Cascade)
   priority Priority @relation(fields: [priorityId], references: [id], onDelete: Cascade)
 
   @@unique([windowId, priorityId])
+  @@index([windowId, sortOrder])
   @@map("window_priorities")
 }
 

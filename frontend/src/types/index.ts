@@ -24,7 +24,7 @@ export interface Window {
   number: number;
   isActive: boolean;
   operators?: { user: { id: string; fullName: string } }[];
-  priorities?: { priority: Priority }[];
+  priorities?: { sortOrder: number; priority: Priority }[];
   sessions?: { user: { fullName: string } }[];
   currentTicket?: Ticket | null;
   todayServed?: number;

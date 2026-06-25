@@ -18,7 +18,7 @@ router.get('/', async (_req, res) => {
   const windows = await prisma.window.findMany({
     include: {
       operators: { include: { user: { select: { id: true, fullName: true } } } },
-      priorities: { include: { priority: true } },
+      priorities: { include: { priority: true }, orderBy: { sortOrder: 'asc' } },
       sessions: {
         where: { endedAt: null },
         include: { user: { select: { fullName: true } } },
@@ -50,7 +50,7 @@ router.get('/mine', authMiddleware, requireRoles(UserRole.WINDOW), async (req, r
     include: {
       window: {
         include: {
-          priorities: { include: { priority: true } },
+          priorities: { include: { priority: true }, orderBy: { sortOrder: 'asc' } },
         },
       },
     },
@@ -263,14 +263,16 @@ router.put('/:id/priorities', authMiddleware, requireRoles(UserRole.ADMIN), asyn
 
     await prisma.$transaction([
       prisma.windowPriority.deleteMany({ where: { windowId } }),
-      ...priorityIds.map((priorityId) =>
-        prisma.windowPriority.create({ data: { windowId, priorityId } })
+      ...priorityIds.map((priorityId, index) =>
+        prisma.windowPriority.create({
+          data: { windowId, priorityId, sortOrder: index + 1 },
+        })
       ),
     ]);
 
     const window = await prisma.window.findUnique({
       where: { id: windowId },
-      include: { priorities: { include: { priority: true } } },
+      include: { priorities: { include: { priority: true }, orderBy: { sortOrder: 'asc' } } },
     });
 
     await logAudit({ userId: req.user!.sub, action: 'PRIORIDADES_VENTANILLA', details: window?.name, windowId, ipAddress: getClientIp(req) });

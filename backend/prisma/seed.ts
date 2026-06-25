@@ -127,21 +127,43 @@ async function main() {
     create: { windowId: windows[2].id, userId: carlos.id },
   });
 
-  for (const w of windows) {
-    for (const p of [pri, gen]) {
-      await prisma.windowPriority.upsert({
-        where: { windowId_priorityId: { windowId: w.id, priorityId: p.id } },
-        update: {},
-        create: { windowId: w.id, priorityId: p.id },
-      });
-    }
+  async function upsertWindowPriority(
+    windowId: string,
+    priorityId: string,
+    sortOrder: number
+  ) {
+    await prisma.windowPriority.upsert({
+      where: { windowId_priorityId: { windowId, priorityId } },
+      update: { sortOrder },
+      create: { windowId, priorityId, sortOrder },
+    });
   }
 
-  await prisma.windowPriority.upsert({
-    where: { windowId_priorityId: { windowId: windows[0].id, priorityId: pen.id } },
-    update: {},
-    create: { windowId: windows[0].id, priorityId: pen.id },
-  });
+  // Ventanilla 1: General primero, luego Pendientes
+  for (const [priority, order] of [
+    [gen, 1],
+    [pen, 2],
+    [pri, 3],
+  ] as const) {
+    await upsertWindowPriority(windows[0].id, priority.id, order);
+  }
+
+  // Ventanilla 2: Pendientes primero, luego General
+  for (const [priority, order] of [
+    [pen, 1],
+    [gen, 2],
+    [pri, 3],
+  ] as const) {
+    await upsertWindowPriority(windows[1].id, priority.id, order);
+  }
+
+  // Ventanilla 3: General primero, luego Prioritario
+  for (const [priority, order] of [
+    [gen, 1],
+    [pri, 2],
+  ] as const) {
+    await upsertWindowPriority(windows[2].id, priority.id, order);
+  }
 
   await prisma.tickerMessage.createMany({
     data: [

@@ -131,20 +131,34 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
     }
   }
 
-  async function togglePriority(windowId: string, priorityId: string, currentIds: string[]) {
+  async function saveWindowPriorities(windowId: string, priorityIds: string[]) {
     setError('');
-    const next = currentIds.includes(priorityId)
-      ? currentIds.filter((id) => id !== priorityId)
-      : [...currentIds, priorityId];
     try {
       await api(`/windows/${windowId}/priorities`, {
         method: 'PUT',
-        body: JSON.stringify({ priorityIds: next }),
+        body: JSON.stringify({ priorityIds }),
       });
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al actualizar prioridades');
     }
+  }
+
+  async function togglePriority(windowId: string, priorityId: string, orderedIds: string[]) {
+    const next = orderedIds.includes(priorityId)
+      ? orderedIds.filter((id) => id !== priorityId)
+      : [...orderedIds, priorityId];
+    await saveWindowPriorities(windowId, next);
+  }
+
+  async function movePriority(windowId: string, orderedIds: string[], priorityId: string, direction: 'up' | 'down') {
+    const index = orderedIds.indexOf(priorityId);
+    if (index < 0) return;
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= orderedIds.length) return;
+    const next = [...orderedIds];
+    [next[index], next[target]] = [next[target], next[index]];
+    await saveWindowPriorities(windowId, next);
   }
 
   function assignedWindowForUser(userId: string): Window | undefined {
@@ -217,6 +231,7 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
             onUnassign={unassignOperator}
             onDelete={deleteWindow}
             onTogglePriority={togglePriority}
+            onMovePriority={movePriority}
           />
         ))}
       </div>
@@ -239,6 +254,7 @@ function WindowCard({
   onUnassign,
   onDelete,
   onTogglePriority,
+  onMovePriority,
 }: {
   window: Window;
   activePriorities: Priority[];
@@ -249,7 +265,8 @@ function WindowCard({
   onAssign: (windowId: string, userId: string) => void;
   onUnassign: (windowId: string, name: string) => void;
   onDelete: (w: Window) => void;
-  onTogglePriority: (windowId: string, priorityId: string, currentIds: string[]) => void;
+  onTogglePriority: (windowId: string, priorityId: string, orderedIds: string[]) => void;
+  onMovePriority: (windowId: string, orderedIds: string[], priorityId: string, direction: 'up' | 'down') => void;
 }) {
   const [name, setName] = useState(w.name);
   const [number, setNumber] = useState(String(w.number));
@@ -259,7 +276,15 @@ function WindowCard({
     setNumber(String(w.number));
   }, [w.id, w.name, w.number]);
   const operator = operatorOf(w);
-  const priorityIds = w.priorities?.map((wp) => wp.priority.id) ?? [];
+  const orderedPriorities = useMemo(
+    () =>
+      [...(w.priorities ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.priority.code.localeCompare(b.priority.code))
+        .map((wp) => wp.priority),
+    [w.priorities]
+  );
+  const orderedIds = orderedPriorities.map((p) => p.id);
+  const assignedIdSet = new Set(orderedIds);
   const isBusy = w.currentTicket?.status === 'ATENDIENDO' || w.currentTicket?.status === 'LLAMADO';
   const onBreak = w.activeSession?.availableForService === false;
   const statusLabel = !w.isActive
@@ -365,25 +390,73 @@ function WindowCard({
         </div>
 
         <div>
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Prioridades que atiende</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+            Orden de atención por ventanilla
+          </p>
+          <p className="text-xs text-slate-400 mb-2">
+            1 = atiende primero. Cada ventanilla puede tener un orden distinto.
+          </p>
+          {orderedPriorities.length > 0 ? (
+            <ul className="space-y-2 mb-3">
+              {orderedPriorities.map((p, index) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2"
+                >
+                  <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {index + 1}
+                  </span>
+                  <span className="flex-1 text-sm font-medium text-blue-900">
+                    {p.name} <span className="text-blue-600">({p.code})</span>
+                  </span>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => onMovePriority(w.id, orderedIds, p.id, 'up')}
+                      className="px-2 py-1 text-xs rounded border bg-white disabled:opacity-30 hover:bg-slate-50"
+                      title="Subir"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === orderedPriorities.length - 1}
+                      onClick={() => onMovePriority(w.id, orderedIds, p.id, 'down')}
+                      className="px-2 py-1 text-xs rounded border bg-white disabled:opacity-30 hover:bg-slate-50"
+                      title="Bajar"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onTogglePriority(w.id, p.id, orderedIds)}
+                      className="px-2 py-1 text-xs rounded border border-red-200 text-red-600 bg-white hover:bg-red-50"
+                      title="Quitar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-400 mb-3">Sin prioridades asignadas.</p>
+          )}
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Agregar prioridad</p>
           <div className="flex flex-wrap gap-2">
-            {activePriorities.map((p) => {
-              const active = priorityIds.includes(p.id);
-              return (
+            {activePriorities
+              .filter((p) => !assignedIdSet.has(p.id))
+              .map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => onTogglePriority(w.id, p.id, priorityIds)}
-                  className={`text-sm px-3 py-1.5 rounded-lg border font-medium transition ${
-                    active
-                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
-                  }`}
+                  onClick={() => onTogglePriority(w.id, p.id, orderedIds)}
+                  className="text-sm px-3 py-1.5 rounded-lg border font-medium bg-white border-slate-200 text-slate-600 hover:border-blue-300"
                 >
-                  {p.code}
+                  + {p.code}
                 </button>
-              );
-            })}
+              ))}
           </div>
         </div>
 
