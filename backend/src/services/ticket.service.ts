@@ -2,6 +2,7 @@ import { Prisma, TicketStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { datePrefixToLabel, formatDisplayCode, formatUniqueCode, parseDatePrefix, todayPrefix } from '../utils/date.js';
 import { orderedWindowPriorityIds, sortTicketsByWindowPriority, windowPriorityInclude } from '../utils/window-priority-order.js';
+import { assertRepeatCallCooldown } from '../utils/call-cooldown.js';
 import { ensureDailyOperations } from './daily-reset.service.js';
 import { syncDailyHistoryForDate } from './daily-history.service.js';
 import { logAudit } from './audit.service.js';
@@ -117,6 +118,7 @@ export class TicketService {
             status: TicketStatus.LLAMADO,
             callCount: 1,
             calledAt: now,
+            lastCalledAt: now,
           },
           include: {
             priority: true,
@@ -157,9 +159,12 @@ export class TicketService {
       throw new Error('Se alcanzó el máximo de llamados (3)');
     }
 
+    assertRepeatCallCooldown(ticket.lastCalledAt ?? ticket.calledAt);
+
+    const now = new Date();
     const updated = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { callCount: { increment: 1 } },
+      data: { callCount: { increment: 1 }, lastCalledAt: now },
       include: { priority: true, window: true },
     });
 

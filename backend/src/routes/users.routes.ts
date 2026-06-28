@@ -40,7 +40,7 @@ router.post('/', async (req, res, next) => {
       ...req.body,
       username: typeof req.body.username === 'string' ? req.body.username.trim() : req.body.username,
       fullName: typeof req.body.fullName === 'string' ? req.body.fullName.trim() : req.body.fullName,
-      password: typeof req.body.password === 'string' ? req.body.password : req.body.password,
+      password: typeof req.body.password === 'string' ? req.body.password.trim() : req.body.password,
     };
     const body = userSchema.parse(raw);
     if (!body.password) {
@@ -57,7 +57,7 @@ router.post('/', async (req, res, next) => {
     const user = await prisma.user.create({
       data: {
         username: body.username,
-        passwordHash: await bcrypt.hash(body.password, 10),
+        passwordHash: await bcrypt.hash(body.password.trim(), 10),
         fullName: body.fullName,
         role: body.role,
       },
@@ -78,6 +78,7 @@ router.patch('/:id', async (req, res, next) => {
       ...req.body,
       username: typeof req.body.username === 'string' ? req.body.username.trim() : req.body.username,
       fullName: typeof req.body.fullName === 'string' ? req.body.fullName.trim() : req.body.fullName,
+      password: typeof req.body.password === 'string' ? req.body.password.trim() : req.body.password,
     };
     const body = userSchema.partial().parse(raw);
 
@@ -96,7 +97,7 @@ router.patch('/:id', async (req, res, next) => {
     if (body.fullName !== undefined) data.fullName = body.fullName;
     if (body.role !== undefined) data.role = body.role;
     if (body.status !== undefined) data.status = body.status;
-    if (body.password) data.passwordHash = await bcrypt.hash(body.password, 10);
+    if (body.password) data.passwordHash = await bcrypt.hash(body.password.trim(), 10);
 
     const user = await prisma.user.update({
       where: { id: userId },

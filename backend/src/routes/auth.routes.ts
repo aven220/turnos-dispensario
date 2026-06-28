@@ -23,10 +23,17 @@ router.post('/login', async (req, res, next) => {
       username: typeof req.body.username === 'string' ? req.body.username.trim() : req.body.username,
       password: typeof req.body.password === 'string' ? req.body.password.trim() : req.body.password,
     });
-    const user = await prisma.user.findUnique({ where: { username: body.username } });
+    const user = await prisma.user.findFirst({
+      where: { username: { equals: body.username, mode: 'insensitive' } },
+    });
 
-    if (!user || user.status !== UserStatus.ACTIVE) {
+    if (!user) {
       res.status(401).json({ error: 'Credenciales inválidas' });
+      return;
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      res.status(401).json({ error: 'Usuario inactivo. Contacte al administrador.' });
       return;
     }
 

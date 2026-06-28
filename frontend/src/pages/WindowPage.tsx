@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket } from '../types';
+import { repeatCallCooldownRemaining } from '../utils/callCooldown';
 
 interface WindowState {
   activeTicket: Ticket | null;
@@ -22,6 +23,27 @@ export function WindowPage() {
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<PendingWindowMessage | null>(null);
+  const [repeatCooldownSec, setRepeatCooldownSec] = useState(0);
+
+  const ticket = state?.activeTicket;
+  const repeatOnCooldown = repeatCooldownSec > 0;
+
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'LLAMADO') {
+      setRepeatCooldownSec(0);
+      return;
+    }
+
+    const lastCalled = ticket.lastCalledAt ?? ticket.calledAt;
+    const tick = () => {
+      const remaining = repeatCallCooldownRemaining(lastCalled);
+      setRepeatCooldownSec(Math.ceil(remaining / 1000));
+    };
+
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.callCount, ticket?.lastCalledAt, ticket?.calledAt, ticket?.status]);
 
   const loadPendingMessage = useCallback(async () => {
     if (!windowId) return;
@@ -139,7 +161,6 @@ export function WindowPage() {
     );
   }
 
-  const ticket = state?.activeTicket;
   const showQueue = (state?.queueCount ?? 0) > 0;
   const isAvailable = state?.session?.availableForService !== false;
 
@@ -220,8 +241,18 @@ export function WindowPage() {
             <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable || blockedByMessage} className="col-span-2 py-4 text-lg" variant="primary">
               Tomar siguiente
             </Button>
-            <Button onClick={() => action('repeat')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount >= 3 || blockedByMessage}>
-              Repetir llamado
+            <Button
+              onClick={() => action('repeat')}
+              disabled={
+                loading ||
+                !ticket ||
+                ticket.status !== 'LLAMADO' ||
+                ticket.callCount >= 3 ||
+                blockedByMessage ||
+                repeatOnCooldown
+              }
+            >
+              {repeatOnCooldown ? `Espere ${repeatCooldownSec}s…` : 'Repetir llamado'}
             </Button>
             <Button onClick={() => action('start')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || blockedByMessage} variant="success">
               Iniciar atención

@@ -43,6 +43,7 @@ export interface Ticket {
   window?: Window | null;
   createdAt: string;
   calledAt?: string | null;
+  lastCalledAt?: string | null;
   attendingAt?: string | null;
   finishedAt?: string | null;
   createdBy?: { fullName: string };

@@ -230,7 +230,7 @@ export function AdminPage() {
         method: 'POST',
         body: JSON.stringify({
           username: String(fd.get('username') ?? '').trim(),
-          password: fd.get('password'),
+          password: String(fd.get('password') ?? '').trim(),
           fullName: String(fd.get('fullName') ?? '').trim(),
           role: fd.get('role'),
         }),
