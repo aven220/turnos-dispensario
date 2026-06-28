@@ -5,6 +5,8 @@ import type { User } from '../types';
 
 const roleLabels: Record<User['role'], string> = {
   ADMIN: 'Administrador',
+  AREA_MANAGER: 'Jefe de área',
+  AUDITOR: 'Auditoría',
   FILTER: 'Filtro',
   WINDOW: 'Ventanilla',
 };

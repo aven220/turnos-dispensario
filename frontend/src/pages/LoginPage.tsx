@@ -17,6 +17,8 @@ export function LoginPage() {
         ADMIN: '/admin',
         FILTER: '/filtro',
         WINDOW: '/ventanilla',
+        AREA_MANAGER: '/jefe-area',
+        AUDITOR: '/auditoria',
       };
       navigate(routes[user.role] ?? '/');
     }

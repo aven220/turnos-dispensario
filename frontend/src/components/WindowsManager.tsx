@@ -8,6 +8,8 @@ interface WindowsManagerProps {
   priorities: Priority[];
   operators: User[];
   onRefresh: () => void;
+  /** Solo prioridades y datos básicos — sin crear/eliminar ni operadores */
+  areaManagerMode?: boolean;
 }
 
 function operatorOf(w: Window): { id: string; fullName: string } | null {
@@ -18,7 +20,7 @@ function operatorOf(w: Window): { id: string; fullName: string } | null {
   return null;
 }
 
-export function WindowsManager({ windows, priorities, operators, onRefresh }: WindowsManagerProps) {
+export function WindowsManager({ windows, priorities, operators, onRefresh, areaManagerMode = false }: WindowsManagerProps) {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -186,6 +188,7 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
         ))}
       </div>
 
+      {!areaManagerMode && (
       <Card>
         <h3 className="font-semibold mb-3">Nueva ventanilla</h3>
         <form onSubmit={createWindow} className="flex flex-wrap gap-3 items-end">
@@ -216,6 +219,7 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
           </Button>
         </form>
       </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {[...windows].sort((a, b) => a.number - b.number).map((w) => (
@@ -232,6 +236,7 @@ export function WindowsManager({ windows, priorities, operators, onRefresh }: Wi
             onDelete={deleteWindow}
             onTogglePriority={togglePriority}
             onMovePriority={movePriority}
+            areaManagerMode={areaManagerMode}
           />
         ))}
       </div>
@@ -255,6 +260,7 @@ function WindowCard({
   onDelete,
   onTogglePriority,
   onMovePriority,
+  areaManagerMode = false,
 }: {
   window: Window;
   activePriorities: Priority[];
@@ -267,6 +273,7 @@ function WindowCard({
   onDelete: (w: Window) => void;
   onTogglePriority: (windowId: string, priorityId: string, orderedIds: string[]) => void;
   onMovePriority: (windowId: string, orderedIds: string[], priorityId: string, direction: 'up' | 'down') => void;
+  areaManagerMode?: boolean;
 }) {
   const [name, setName] = useState(w.name);
   const [number, setNumber] = useState(String(w.number));
@@ -344,6 +351,7 @@ function WindowCard({
           </Button>
         </div>
 
+        {!areaManagerMode && (
         <div>
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Operador</p>
           {operator ? (
@@ -388,6 +396,13 @@ function WindowCard({
           </select>
           <p className="text-xs text-slate-400 mt-1">Un operador solo puede estar en una ventanilla.</p>
         </div>
+        )}
+
+        {areaManagerMode && operator && (
+          <p className="text-sm text-slate-600">
+            Operador en sesión: <strong>{operator.fullName}</strong>
+          </p>
+        )}
 
         <div>
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
@@ -460,6 +475,7 @@ function WindowCard({
           </div>
         </div>
 
+        {!areaManagerMode && (
         <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
           <Button variant="secondary" onClick={() => onToggleActive(w)} className="text-sm">
             {w.isActive ? 'Desactivar' : 'Activar'}
@@ -468,6 +484,7 @@ function WindowCard({
             Eliminar
           </Button>
         </div>
+        )}
       </div>
     </Card>
   );

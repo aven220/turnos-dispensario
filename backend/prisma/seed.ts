@@ -8,6 +8,9 @@ async function main() {
   const filterPassword = await bcrypt.hash('CencoicFiltro2026', 10);
   const windowPassword = await bcrypt.hash('CencoicVent2026', 10);
 
+  const areaPassword = await bcrypt.hash('CencoicJefe2026', 10);
+  const auditorPassword = await bcrypt.hash('CencoicAudit2026', 10);
+
   const admin = await prisma.user.upsert({
     where: { username: 'admin' },
     update: { passwordHash: adminPassword, status: UserStatus.ACTIVE },
@@ -60,6 +63,28 @@ async function main() {
       passwordHash: windowPassword,
       fullName: 'Carlos Ruiz',
       role: UserRole.WINDOW,
+    },
+  });
+
+  const jefe = await prisma.user.upsert({
+    where: { username: 'jefe' },
+    update: { passwordHash: areaPassword, status: UserStatus.ACTIVE },
+    create: {
+      username: 'jefe',
+      passwordHash: areaPassword,
+      fullName: 'Jefe de Área',
+      role: UserRole.AREA_MANAGER,
+    },
+  });
+
+  const auditor = await prisma.user.upsert({
+    where: { username: 'auditor' },
+    update: { passwordHash: auditorPassword, status: UserStatus.ACTIVE },
+    create: {
+      username: 'auditor',
+      passwordHash: auditorPassword,
+      fullName: 'Jefe Auditoría',
+      role: UserRole.AUDITOR,
     },
   });
 
@@ -175,7 +200,12 @@ async function main() {
   });
 
   console.log('Seed completado');
-  console.log({ admin: admin.username, filter: filter.username });
+  console.log({
+    admin: admin.username,
+    filter: filter.username,
+    jefe: jefe.username,
+    auditor: auditor.username,
+  });
 }
 
 main()

@@ -508,7 +508,18 @@ export class TicketService {
     const upcoming = await this.getUpcomingForWindow(windowId, settings.windowQueueCount);
     const queueTotal = await this.countPendingForWindow(windowId);
 
-    return { activeTicket, session, todayServed, upcoming, queueCount: settings.windowQueueCount, queueTotal };
+    const { windowMessageService } = await import('./window-message.service.js');
+    const pendingMessage = await windowMessageService.getPendingForWindow(windowId);
+
+    return {
+      activeTicket,
+      session,
+      todayServed,
+      upcoming,
+      queueCount: settings.windowQueueCount,
+      queueTotal,
+      pendingMessage,
+    };
   }
 
   async setSessionAvailability(windowId: string, userId: string, available: boolean, ipAddress?: string) {
@@ -590,7 +601,7 @@ export class TicketService {
         },
         tickets: {
           where: ticketWindowFilter,
-          select: { status: true, attendingAt: true, finishedAt: true, calledAt: true },
+          select: { status: true, attendingAt: true, finishedAt: true, calledAt: true, createdAt: true },
         },
       },
       orderBy: { number: 'asc' },
@@ -602,8 +613,26 @@ export class TicketService {
         .filter((t) => t.attendingAt && t.finishedAt)
         .map((t) => (t.finishedAt!.getTime() - t.attendingAt!.getTime()) / 1000);
 
+      const waitDurations = w.tickets
+        .filter((t) => t.calledAt && t.createdAt)
+        .map((t) => (t.calledAt!.getTime() - t.createdAt.getTime()) / 1000);
+
+      const responseDurations = w.tickets
+        .filter((t) => t.calledAt && t.attendingAt)
+        .map((t) => (t.attendingAt!.getTime() - t.calledAt!.getTime()) / 1000);
+
       const avgSeconds =
         durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+
+      const avgWaitSeconds =
+        waitDurations.length > 0
+          ? Math.round(waitDurations.reduce((a, b) => a + b, 0) / waitDurations.length)
+          : 0;
+
+      const avgResponseSeconds =
+        responseDurations.length > 0
+          ? Math.round(responseDurations.reduce((a, b) => a + b, 0) / responseDurations.length)
+          : 0;
 
       const openSession = w.sessions[0];
       const attentionStatus = !openSession
@@ -620,6 +649,8 @@ export class TicketService {
         totalAbsent: w.tickets.filter((t) => t.status === TicketStatus.AUSENTE).length,
         totalCalled: w.tickets.filter((t) => t.calledAt).length,
         avgAttentionSeconds: avgSeconds,
+        avgWaitSeconds,
+        avgResponseSeconds,
         assignedUser: w.operators[0]?.user.fullName ?? null,
         attentionStatus,
       };

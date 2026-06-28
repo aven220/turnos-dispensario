@@ -1,13 +1,13 @@
-import { UserRole } from '@prisma/client';
 import { Router } from 'express';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware, requireRoles } from '../middleware/auth.js';
 import { exportService } from '../services/export.service.js';
 import { ticketService } from '../services/ticket.service.js';
 import { parseDatePrefix } from '../utils/date.js';
+import { STATS_ROLES } from '../utils/roles.js';
 
 const router = Router();
-router.use(authMiddleware, requireRoles(UserRole.ADMIN));
+router.use(authMiddleware, requireRoles(...STATS_ROLES));
 
 function parseDates(req: { query: Record<string, unknown> }) {
   const dateFrom = req.query.from ? new Date(req.query.from as string) : undefined;

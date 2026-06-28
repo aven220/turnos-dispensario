@@ -5,7 +5,9 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware, getClientIp, requireRoles } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.service.js';
 import { ticketService } from '../services/ticket.service.js';
+import { windowMessageService } from '../services/window-message.service.js';
 import { paramId } from '../utils/params.js';
+import { AREA_MANAGER_ROLES, ADMIN_ROLES } from '../utils/roles.js';
 
 const router = Router();
 
@@ -76,7 +78,7 @@ router.post('/', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, 
   }
 });
 
-router.patch('/:id', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
+router.patch('/:id', authMiddleware, requireRoles(...AREA_MANAGER_ROLES), async (req, res, next) => {
   try {
     const body = windowSchema.partial().extend({ isActive: z.boolean().optional() }).parse(req.body);
     const windowId = paramId(req);
@@ -256,7 +258,7 @@ router.delete('/:id', authMiddleware, requireRoles(UserRole.ADMIN), async (req, 
   }
 });
 
-router.put('/:id/priorities', authMiddleware, requireRoles(UserRole.ADMIN), async (req, res, next) => {
+router.put('/:id/priorities', authMiddleware, requireRoles(...AREA_MANAGER_ROLES), async (req, res, next) => {
   try {
     const { priorityIds } = z.object({ priorityIds: z.array(z.string()) }).parse(req.body);
     const windowId = paramId(req);
@@ -277,6 +279,53 @@ router.put('/:id/priorities', authMiddleware, requireRoles(UserRole.ADMIN), asyn
 
     await logAudit({ userId: req.user!.sub, action: 'PRIORIDADES_VENTANILLA', details: window?.name, windowId, ipAddress: getClientIp(req) });
     res.json(window);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/messages/recent', authMiddleware, requireRoles(...ADMIN_ROLES), async (_req, res) => {
+  const messages = await windowMessageService.listRecent();
+  res.json(messages);
+});
+
+router.post('/:id/messages', authMiddleware, requireRoles(...ADMIN_ROLES), async (req, res, next) => {
+  try {
+    const windowId = paramId(req);
+    const { message } = z.object({ message: z.string().min(1).max(500) }).parse(req.body);
+    const created = await windowMessageService.sendMessage(windowId, message, req.user!.sub);
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'MENSAJE_VENTANILLA',
+      details: message.slice(0, 120),
+      windowId,
+      ipAddress: getClientIp(req),
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/messages/pending', authMiddleware, requireRoles(UserRole.WINDOW), async (req, res) => {
+  const windowId = paramId(req);
+  const pending = await windowMessageService.getPendingForWindow(windowId);
+  res.json(pending);
+});
+
+router.post('/messages/:messageId/acknowledge', authMiddleware, requireRoles(UserRole.WINDOW), async (req, res, next) => {
+  try {
+    const messageId = paramId(req, 'messageId');
+    const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    const updated = await windowMessageService.acknowledge(messageId, req.user!.sub, windowId);
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'MENSAJE_VENTANILLA_ACEPTADO',
+      details: updated.message.slice(0, 120),
+      windowId,
+      ipAddress: getClientIp(req),
+    });
+    res.json(updated);
   } catch (err) {
     next(err);
   }

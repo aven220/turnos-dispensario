@@ -71,13 +71,14 @@ function numberToSpanish(num: number): string {
   return String(num);
 }
 
-function displayCodeToSpeech(displayCode: string): string {
+export function displayCodeToSpeech(displayCode: string): string {
   const match = displayCode.match(/^([A-Za-z]+)(\d+)$/);
   if (!match) return displayCode;
 
   const letters = match[1].toUpperCase().split('').join(' ');
-  const digits = match[2].split('').map((d) => numberToSpanish(parseInt(d, 10))).join(' ');
-  return `${letters} ${digits}`;
+  const sequence = parseInt(match[2], 10);
+  const numberSpeech = Number.isNaN(sequence) ? match[2] : numberToSpanish(sequence);
+  return `${letters} ${numberSpeech}`;
 }
 
 export function buildCallMessage(displayCode: string, windowNumber: number, callCount: number): string {

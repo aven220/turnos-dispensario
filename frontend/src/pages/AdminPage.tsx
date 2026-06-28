@@ -4,12 +4,14 @@ import { TvSpeechConfig } from '../components/TvSpeechConfig';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
 import { WindowsManager } from '../components/WindowsManager';
+import { WindowMessagesPanel } from '../components/WindowMessagesPanel';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob, apiUpload } from '../services/api';
 import { getSocket } from '../services/socket';
 import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
+import { formatDuration } from '../utils/formatDuration';
 
 type Tab = 'dashboard' | 'users' | 'windows' | 'priorities' | 'tv' | 'ticketPrint' | 'audit';
 
@@ -553,8 +555,8 @@ export function AdminPage() {
                   <th className="py-2">#</th>
                   <th>Ventanilla</th>
                   <th>Atendidos</th>
-                  <th>Ausentes</th>
-                  <th>Promedio</th>
+                  <th>Espera prom.</th>
+                  <th>Atención prom.</th>
                   <th>Operador</th>
                   <th>Atención</th>
                 </tr>
@@ -565,8 +567,8 @@ export function AdminPage() {
                     <td className="py-2">{i + 1}</td>
                     <td>{w.windowName}</td>
                     <td className="font-bold">{w.totalAttended}</td>
-                    <td>{w.totalAbsent ?? 0}</td>
-                    <td>{Math.floor(w.avgAttentionSeconds / 60)}m {w.avgAttentionSeconds % 60}s</td>
+                    <td>{formatDuration(w.avgWaitSeconds ?? 0)}</td>
+                    <td>{formatDuration(w.avgAttentionSeconds)}</td>
                     <td>{w.assignedUser ?? '—'}</td>
                     <td>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${
@@ -603,6 +605,8 @@ export function AdminPage() {
                   <input name="fullName" defaultValue={editingUser.fullName} placeholder="Nombre completo" minLength={2} className="w-full border rounded-lg px-3 py-2" required />
                   <select name="role" defaultValue={editingUser.role} className="w-full border rounded-lg px-3 py-2">
                     <option value="ADMIN">Administrador</option>
+                    <option value="AREA_MANAGER">Jefe de área</option>
+                    <option value="AUDITOR">Auditoría (jefe)</option>
                     <option value="FILTER">Filtro</option>
                     <option value="WINDOW">Ventanilla</option>
                   </select>
@@ -627,6 +631,8 @@ export function AdminPage() {
                   <input name="fullName" placeholder="Nombre completo" minLength={2} className="w-full border rounded-lg px-3 py-2" required />
                   <select name="role" className="w-full border rounded-lg px-3 py-2">
                     <option value="ADMIN">Administrador</option>
+                    <option value="AREA_MANAGER">Jefe de área</option>
+                    <option value="AUDITOR">Auditoría (jefe)</option>
                     <option value="FILTER">Filtro</option>
                     <option value="WINDOW">Ventanilla</option>
                   </select>
@@ -669,12 +675,15 @@ export function AdminPage() {
       )}
 
       {tab === 'windows' && (
-        <WindowsManager
-          windows={windows}
-          priorities={priorities}
-          operators={windowOperators}
-          onRefresh={loadAll}
-        />
+        <>
+          <WindowMessagesPanel windows={windows} token={token} />
+          <WindowsManager
+            windows={windows}
+            priorities={priorities}
+            operators={windowOperators}
+            onRefresh={loadAll}
+          />
+        </>
       )}
 
       {tab === 'priorities' && (

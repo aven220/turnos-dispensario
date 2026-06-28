@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Layout } from '../components/Layout';
+import { WindowMessageModal, type PendingWindowMessage } from '../components/WindowMessageModal';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
@@ -20,6 +21,17 @@ export function WindowPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<PendingWindowMessage | null>(null);
+
+  const loadPendingMessage = useCallback(async () => {
+    if (!windowId) return;
+    try {
+      const msg = await api<PendingWindowMessage | null>(`/windows/${windowId}/messages/pending`);
+      setPendingMessage(msg);
+    } catch {
+      setPendingMessage(null);
+    }
+  }, [windowId]);
 
   const loadState = useCallback(async () => {
     if (!windowId) return;
@@ -30,9 +42,11 @@ export function WindowPage() {
   useEffect(() => {
     if (!windowId) return;
     loadState();
+    loadPendingMessage();
     const socket = getSocket(token ?? undefined);
     socket.emit('join:window', windowId);
     const refresh = () => loadState();
+    const onMessage = (msg: PendingWindowMessage) => setPendingMessage(msg);
     socket.on('ticket:created', refresh);
     socket.on('ticket:called', refresh);
     socket.on('ticket:repeated', refresh);
@@ -41,6 +55,7 @@ export function WindowPage() {
     socket.on('ticket:absent', refresh);
     socket.on('tv:settings-updated', refresh);
     socket.on('window:availability-changed', refresh);
+    socket.on('window:message', onMessage);
     return () => {
       socket.off('ticket:created', refresh);
       socket.off('ticket:called', refresh);
@@ -50,8 +65,20 @@ export function WindowPage() {
       socket.off('ticket:absent', refresh);
       socket.off('tv:settings-updated', refresh);
       socket.off('window:availability-changed', refresh);
+      socket.off('window:message', onMessage);
     };
-  }, [windowId, token, loadState]);
+  }, [windowId, token, loadState, loadPendingMessage]);
+
+  async function acknowledgeMessage() {
+    if (!windowId || !pendingMessage) return;
+    await api(`/windows/messages/${pendingMessage.id}/acknowledge`, {
+      method: 'POST',
+      body: JSON.stringify({ windowId }),
+    });
+    setPendingMessage(null);
+  }
+
+  const blockedByMessage = !!pendingMessage;
 
   async function action(path: string) {
     if (!windowId || !state?.activeTicket) return;
@@ -118,6 +145,9 @@ export function WindowPage() {
 
   return (
     <Layout title="Módulo Ventanilla">
+      {pendingMessage && (
+        <WindowMessageModal message={pendingMessage} onAcknowledge={acknowledgeMessage} />
+      )}
       <Card className={`mb-6 border-2 ${isAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -134,7 +164,7 @@ export function WindowPage() {
           <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white shrink-0 self-start sm:self-center">
             <button
               type="button"
-              disabled={availabilityLoading || isAvailable}
+              disabled={availabilityLoading || isAvailable || blockedByMessage}
               onClick={() => setAvailability(true)}
               className={`px-5 py-3 text-sm font-semibold transition ${
                 isAvailable
@@ -146,7 +176,7 @@ export function WindowPage() {
             </button>
             <button
               type="button"
-              disabled={availabilityLoading || !isAvailable}
+              disabled={availabilityLoading || !isAvailable || blockedByMessage}
               onClick={() => setAvailability(false)}
               className={`px-5 py-3 text-sm font-semibold transition border-l border-slate-200 ${
                 !isAvailable
@@ -187,19 +217,19 @@ export function WindowPage() {
           {error && <p className="text-red-600 text-center mb-4">{error}</p>}
 
           <div className="grid grid-cols-2 gap-3">
-            <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable} className="col-span-2 py-4 text-lg" variant="primary">
+            <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable || blockedByMessage} className="col-span-2 py-4 text-lg" variant="primary">
               Tomar siguiente
             </Button>
-            <Button onClick={() => action('repeat')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount >= 3}>
+            <Button onClick={() => action('repeat')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount >= 3 || blockedByMessage}>
               Repetir llamado
             </Button>
-            <Button onClick={() => action('start')} disabled={loading || !ticket || ticket.status !== 'LLAMADO'} variant="success">
+            <Button onClick={() => action('start')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || blockedByMessage} variant="success">
               Iniciar atención
             </Button>
-            <Button onClick={() => action('finish')} disabled={loading || !ticket || ticket.status !== 'ATENDIENDO'} variant="success">
+            <Button onClick={() => action('finish')} disabled={loading || !ticket || ticket.status !== 'ATENDIENDO' || blockedByMessage} variant="success">
               Finalizar
             </Button>
-            <Button onClick={() => action('absent')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount < 3} variant="danger">
+            <Button onClick={() => action('absent')} disabled={loading || !ticket || ticket.status !== 'LLAMADO' || ticket.callCount < 3 || blockedByMessage} variant="danger">
               Marcar ausente
             </Button>
           </div>

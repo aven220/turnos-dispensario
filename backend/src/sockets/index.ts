@@ -26,6 +26,8 @@ export function setupSocketIO(httpServer: HttpServer): Server {
       socket.join(`user:${payload.sub}`);
       socket.join(`role:${payload.role}`);
       if (payload.role === 'ADMIN') socket.join('admin');
+      if (payload.role === 'AREA_MANAGER') socket.join('admin');
+      if (payload.role === 'AUDITOR') socket.join('admin');
       if (payload.role === 'WINDOW') socket.join('windows');
       if (payload.role === 'FILTER') socket.join('filter');
       next();

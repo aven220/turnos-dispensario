@@ -12,6 +12,13 @@ enum UserRole {
   ADMIN
   FILTER
   WINDOW
+  AREA_MANAGER
+  AUDITOR
+}
+
+enum WindowMessageStatus {
+  PENDING
+  ACKNOWLEDGED
 }
 
 enum UserStatus {
@@ -43,10 +50,12 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  windowAssignments WindowOperator[]
-  ticketsCreated    Ticket[]         @relation("TicketCreatedBy")
-  auditLogs         AuditLog[]
-  sessions          OperatorSession[]
+  windowAssignments   WindowOperator[]
+  ticketsCreated      Ticket[]         @relation("TicketCreatedBy")
+  auditLogs           AuditLog[]
+  sessions            OperatorSession[]
+  messagesSent        WindowMessage[]  @relation("MessageSentBy")
+  messagesAcknowledged WindowMessage[] @relation("MessageAcknowledgedBy")
 
   @@map("users")
 }
@@ -64,8 +73,27 @@ model Window {
   tickets    Ticket[]
   sessions   OperatorSession[]
   auditLogs  AuditLog[]
+  messages   WindowMessage[]
 
   @@map("windows")
+}
+
+model WindowMessage {
+  id               String              @id @default(cuid())
+  windowId         String              @map("window_id")
+  message          String
+  status           WindowMessageStatus @default(PENDING)
+  sentById         String              @map("sent_by_id")
+  acknowledgedById String?             @map("acknowledged_by_id")
+  sentAt           DateTime            @default(now()) @map("sent_at")
+  acknowledgedAt   DateTime?           @map("acknowledged_at")
+
+  window           Window @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  sentBy           User   @relation("MessageSentBy", fields: [sentById], references: [id])
+  acknowledgedBy   User?  @relation("MessageAcknowledgedBy", fields: [acknowledgedById], references: [id])
+
+  @@index([windowId, status])
+  @@map("window_messages")
 }
 
 model WindowOperator {

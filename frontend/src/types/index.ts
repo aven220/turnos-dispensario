@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'FILTER' | 'WINDOW';
+export type UserRole = 'ADMIN' | 'FILTER' | 'WINDOW' | 'AREA_MANAGER' | 'AUDITOR';
 
 export interface User {
   id: string;
@@ -115,6 +115,18 @@ export interface TvDisplay {
   settings: TvSettings;
 }
 
+export interface WindowMessage {
+  id: string;
+  windowId: string;
+  message: string;
+  status: 'PENDING' | 'ACKNOWLEDGED';
+  sentAt: string;
+  acknowledgedAt?: string | null;
+  sentBy?: { fullName: string };
+  acknowledgedBy?: { fullName: string } | null;
+  window?: { id: string; name: string; number: number };
+}
+
 export interface Stats {
   generated: number;
   attended: number;
@@ -128,6 +140,8 @@ export interface Stats {
     totalAttended: number;
     totalAbsent?: number;
     avgAttentionSeconds: number;
+    avgWaitSeconds?: number;
+    avgResponseSeconds?: number;
     assignedUser: string | null;
     attentionStatus: 'ACTIVE' | 'PAUSED' | 'OFFLINE';
   }[];

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { authMiddleware, getClientIp, requireRoles } from '../middleware/auth.js';
 import { getTicketPrintSettings, updateTicketPrintSettings } from '../services/ticket-print-settings.service.js';
 import { ticketService } from '../services/ticket.service.js';
+import { windowMessageService } from '../services/window-message.service.js';
 import { getIO } from '../sockets/index.js';
 import { paramId } from '../utils/params.js';
 
@@ -83,6 +84,7 @@ router.get('/:id/reprint', requireRoles(UserRole.FILTER, UserRole.ADMIN), async 
 router.post('/take-next', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.takeNextTicket(windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:called', ticket);
     res.json(ticket);
@@ -94,6 +96,7 @@ router.post('/take-next', requireRoles(UserRole.WINDOW), async (req, res, next) 
 router.post('/:id/repeat', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.repeatCall(paramId(req), windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:repeated', ticket);
     res.json(ticket);
@@ -105,6 +108,7 @@ router.post('/:id/repeat', requireRoles(UserRole.WINDOW), async (req, res, next)
 router.post('/:id/start', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.startAttention(paramId(req), windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:attending', ticket);
     res.json(ticket);
@@ -116,6 +120,7 @@ router.post('/:id/start', requireRoles(UserRole.WINDOW), async (req, res, next) 
 router.post('/:id/finish', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.finishAttention(paramId(req), windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:finished', ticket);
     res.json(ticket);
@@ -127,6 +132,7 @@ router.post('/:id/finish', requireRoles(UserRole.WINDOW), async (req, res, next)
 router.post('/:id/absent', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const { windowId } = z.object({ windowId: z.string() }).parse(req.body);
+    await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.markAbsent(paramId(req), windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:absent', ticket);
     res.json(ticket);
@@ -143,6 +149,7 @@ router.get('/window/:windowId/state', requireRoles(UserRole.WINDOW, UserRole.ADM
 router.patch('/window/:windowId/availability', requireRoles(UserRole.WINDOW), async (req, res, next) => {
   try {
     const windowId = paramId(req, 'windowId');
+    await windowMessageService.assertNoPendingMessage(windowId);
     const { available } = z.object({ available: z.boolean() }).parse(req.body);
     const session = await ticketService.setSessionAvailability(
       windowId,

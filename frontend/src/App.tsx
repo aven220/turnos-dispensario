@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AdminPage } from './pages/AdminPage';
+import { AreaManagerPage } from './pages/AreaManagerPage';
+import { AuditorPage } from './pages/AuditorPage';
 import { FilterPage } from './pages/FilterPage';
 import { LoginPage } from './pages/LoginPage';
 import { TvPage } from './pages/TvPage';
@@ -20,6 +22,8 @@ export function App() {
       <Route path="/" element={<LoginPage />} />
       <Route path="/tv" element={<TvPage />} />
       <Route path="/admin" element={<ProtectedRoute roles={['ADMIN']}><AdminPage /></ProtectedRoute>} />
+      <Route path="/jefe-area" element={<ProtectedRoute roles={['AREA_MANAGER']}><AreaManagerPage /></ProtectedRoute>} />
+      <Route path="/auditoria" element={<ProtectedRoute roles={['AUDITOR', 'ADMIN']}><AuditorPage /></ProtectedRoute>} />
       <Route path="/filtro" element={<ProtectedRoute roles={['FILTER', 'ADMIN']}><FilterPage /></ProtectedRoute>} />
       <Route path="/ventanilla" element={<ProtectedRoute roles={['WINDOW']}><WindowPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

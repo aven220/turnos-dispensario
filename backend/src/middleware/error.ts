@@ -21,6 +21,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   const message = err instanceof Error ? err.message : 'Error interno';
+  const customStatus = err instanceof Error ? (err as Error & { statusCode?: number }).statusCode : undefined;
+  if (customStatus) {
+    res.status(customStatus).json({ error: message });
+    return;
+  }
   const status = message.includes('no encontrad') || message.includes('No hay') ? 404 : 400;
   res.status(status).json({ error: message });
 }
