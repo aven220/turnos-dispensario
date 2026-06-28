@@ -262,3 +262,18 @@ model DailyCounter {
   @@unique([datePrefix, priorityId])
   @@map("daily_counters")
 }
+
+model DailyHistory {
+  datePrefix    String   @id @map("date_prefix")
+  generated     Int      @default(0)
+  attended      Int      @default(0)
+  absent        Int      @default(0)
+  cancelled     Int      @default(0)
+  pending       Int      @default(0)
+  windowSummary Json?    @map("window_summary")
+  archivedAt    DateTime @default(now()) @map("archived_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([archivedAt])
+  @@map("daily_history")
+}

@@ -127,6 +127,45 @@ export interface WindowMessage {
   window?: { id: string; name: string; number: number };
 }
 
+export interface DailyHistoryDay {
+  datePrefix: string;
+  dateLabel: string;
+  generated: number;
+  attended: number;
+  absent: number;
+  cancelled: number;
+  pending: number;
+  isToday?: boolean;
+  archivedAt: string;
+  windowSummary: {
+    windowId: string;
+    windowName: string;
+    windowNumber: number;
+    attended: number;
+    absent: number;
+    cancelled: number;
+  }[];
+}
+
+export interface DayDispensation {
+  id: string;
+  displayCode: string;
+  uniqueCode: string;
+  status: 'FINALIZADO' | 'AUSENTE';
+  priority: string;
+  priorityCode: string;
+  windowName: string | null;
+  windowNumber: number | null;
+  waitSeconds: number | null;
+  attentionSeconds: number | null;
+}
+
+export interface DayDispensations {
+  datePrefix: string;
+  dateLabel: string;
+  dispensations: DayDispensation[];
+}
+
 export interface Stats {
   generated: number;
   attended: number;

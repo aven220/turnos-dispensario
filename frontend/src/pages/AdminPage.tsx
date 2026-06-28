@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { AuditMonitor } from '../components/AuditMonitor';
+import { DailyHistoryPanel } from '../components/DailyHistoryPanel';
 import { TvSpeechConfig } from '../components/TvSpeechConfig';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
@@ -13,7 +14,7 @@ import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
 import { formatDuration } from '../utils/formatDuration';
 
-type Tab = 'dashboard' | 'users' | 'windows' | 'priorities' | 'tv' | 'ticketPrint' | 'audit';
+type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'tv' | 'ticketPrint' | 'audit';
 
 const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   id: 'default',
@@ -447,13 +448,13 @@ export function AdminPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function downloadDaily(format: 'daily-excel' | 'daily-pdf') {
-    const date = stats?.datePrefix ?? new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const blob = await apiBlob(`/stats/export/${format}`);
+  async function downloadDaily(format: 'daily-excel' | 'daily-pdf', date?: string) {
+    const dateParam = date ?? stats?.datePrefix ?? new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const blob = await apiBlob(`/stats/export/${format}?date=${dateParam}`);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `informe-ventanillas-${date}.${format === 'daily-excel' ? 'xlsx' : 'pdf'}`;
+    a.download = `informe-ventanillas-${dateParam}.${format === 'daily-excel' ? 'xlsx' : 'pdf'}`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -465,6 +466,7 @@ export function AdminPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'dashboard', label: 'Estadísticas' },
+    { id: 'history', label: 'Historial dispensas' },
     { id: 'users', label: 'Usuarios' },
     { id: 'windows', label: 'Ventanillas' },
     { id: 'priorities', label: 'Prioridades' },
@@ -588,6 +590,8 @@ export function AdminPage() {
           </Card>
         </div>
       )}
+
+      {tab === 'history' && <DailyHistoryPanel />}
 
       {tab === 'users' && (
         <div className="grid lg:grid-cols-2 gap-6">

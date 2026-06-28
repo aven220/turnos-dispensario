@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma.js';
 import { datePrefixToLabel, formatDisplayCode, formatUniqueCode, parseDatePrefix, todayPrefix } from '../utils/date.js';
 import { orderedWindowPriorityIds, sortTicketsByWindowPriority, windowPriorityInclude } from '../utils/window-priority-order.js';
 import { ensureDailyOperations } from './daily-reset.service.js';
+import { syncDailyHistoryForDate } from './daily-history.service.js';
 import { logAudit } from './audit.service.js';
 
 const MAX_CALLS = 3;
@@ -249,6 +250,8 @@ export class TicketService {
       ipAddress,
     });
 
+    await syncDailyHistoryForDate(updated.datePrefix);
+
     return updated;
   }
 
@@ -275,6 +278,8 @@ export class TicketService {
       ticketId,
       ipAddress,
     });
+
+    await syncDailyHistoryForDate(updated.datePrefix);
 
     return updated;
   }

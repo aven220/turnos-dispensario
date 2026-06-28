@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AuditMonitor } from '../components/AuditMonitor';
+import { DailyHistoryPanel } from '../components/DailyHistoryPanel';
 import { Layout, Card } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob } from '../services/api';
@@ -14,7 +15,7 @@ function formatTodayLabel(prefix?: string): string {
 export function AuditorPage() {
   const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [tab, setTab] = useState<'stats' | 'monitor'>('stats');
+  const [tab, setTab] = useState<'stats' | 'history' | 'monitor'>('stats');
 
   async function loadStats() {
     const s = await api<Stats>('/stats');
@@ -52,6 +53,7 @@ export function AuditorPage() {
       <div className="flex flex-wrap gap-2 mb-6">
         {[
           { id: 'stats' as const, label: 'Tiempos y estadísticas' },
+          { id: 'history' as const, label: 'Historial dispensas' },
           { id: 'monitor' as const, label: 'Monitor en vivo' },
         ].map((t) => (
           <button
@@ -160,6 +162,8 @@ export function AuditorPage() {
           </Card>
         </div>
       )}
+
+      {tab === 'history' && <DailyHistoryPanel title="Historial de dispensas por día" />}
 
       {tab === 'monitor' && <AuditMonitor />}
     </Layout>

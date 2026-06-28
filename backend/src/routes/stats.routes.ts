@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware, requireRoles } from '../middleware/auth.js';
 import { exportService } from '../services/export.service.js';
+import { getDispensationsForDay, listDailyHistory } from '../services/daily-history.service.js';
 import { ticketService } from '../services/ticket.service.js';
 import { parseDatePrefix } from '../utils/date.js';
 import { STATS_ROLES } from '../utils/roles.js';
@@ -71,6 +72,18 @@ router.get('/export/pdf', async (req, res, next) => {
 router.get('/daily', async (req, res) => {
   const report = await ticketService.getDailyReport(req.query.date as string | undefined);
   res.json(report);
+});
+
+router.get('/history/days', async (req, res) => {
+  const limit = parseInt((req.query.limit as string) ?? '90', 10);
+  const days = await listDailyHistory(limit);
+  res.json(days);
+});
+
+router.get('/history/dispensations', async (req, res) => {
+  const datePrefix = parseDatePrefix(req.query.date as string | undefined);
+  const data = await getDispensationsForDay(datePrefix);
+  res.json(data);
 });
 
 router.get('/export/daily-excel', async (req, res, next) => {
