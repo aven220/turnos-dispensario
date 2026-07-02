@@ -10,6 +10,21 @@ import { logAudit } from './audit.service.js';
 const MAX_CALLS = 3;
 
 export class TicketService {
+  private async requireActiveSession(windowId: string, userId: string) {
+    const session = await prisma.operatorSession.findFirst({
+      where: { windowId, userId, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    });
+    if (!session) {
+      const err = new Error('Su sesión expiró. Cierre sesión e ingrese nuevamente.') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 401;
+      throw err;
+    }
+    return session;
+  }
+
   async createTicket(priorityId: string, createdById: string, ipAddress?: string) {
     await ensureDailyOperations();
     const datePrefix = todayPrefix();
@@ -56,11 +71,8 @@ export class TicketService {
     await ensureDailyOperations();
     const datePrefix = todayPrefix();
 
-    const openSession = await prisma.operatorSession.findFirst({
-      where: { windowId, endedAt: null },
-      orderBy: { startedAt: 'desc' },
-    });
-    if (openSession && !openSession.availableForService) {
+    const openSession = await this.requireActiveSession(windowId, userId);
+    if (!openSession.availableForService) {
       throw new Error('La ventanilla está en pausa. Active el modo atención para tomar turnos.');
     }
 
@@ -147,6 +159,7 @@ export class TicketService {
   }
 
   async repeatCall(ticketId: string, windowId: string, userId: string, ipAddress?: string) {
+    await this.requireActiveSession(windowId, userId);
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
 
     if (ticket.windowId !== windowId) {
@@ -181,6 +194,7 @@ export class TicketService {
   }
 
   async startAttention(ticketId: string, windowId: string, userId: string, ipAddress?: string) {
+    await this.requireActiveSession(windowId, userId);
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
 
     if (ticket.windowId !== windowId) throw new Error('El turno no pertenece a esta ventanilla');
@@ -217,6 +231,7 @@ export class TicketService {
   }
 
   async finishAttention(ticketId: string, windowId: string, userId: string, ipAddress?: string) {
+    await this.requireActiveSession(windowId, userId);
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
 
     if (ticket.windowId !== windowId) throw new Error('El turno no pertenece a esta ventanilla');
@@ -261,6 +276,7 @@ export class TicketService {
   }
 
   async markAbsent(ticketId: string, windowId: string, userId: string, ipAddress?: string) {
+    await this.requireActiveSession(windowId, userId);
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
 
     if (ticket.windowId !== windowId) throw new Error('El turno no pertenece a esta ventanilla');

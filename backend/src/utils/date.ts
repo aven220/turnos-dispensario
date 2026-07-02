@@ -3,6 +3,13 @@ export function todayPrefix(): string {
   return formatDatePrefix(now);
 }
 
+/** Inicio del día local del servidor (medianoche). */
+export function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function formatDatePrefix(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');

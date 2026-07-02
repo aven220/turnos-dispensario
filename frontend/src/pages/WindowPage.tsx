@@ -78,6 +78,7 @@ export function WindowPage() {
     socket.on('tv:settings-updated', refresh);
     socket.on('window:availability-changed', refresh);
     socket.on('window:message', onMessage);
+    socket.on('window:session-ended', refresh);
     return () => {
       socket.off('ticket:created', refresh);
       socket.off('ticket:called', refresh);
@@ -88,6 +89,7 @@ export function WindowPage() {
       socket.off('tv:settings-updated', refresh);
       socket.off('window:availability-changed', refresh);
       socket.off('window:message', onMessage);
+      socket.off('window:session-ended', refresh);
     };
   }, [windowId, token, loadState, loadPendingMessage]);
 
@@ -163,29 +165,38 @@ export function WindowPage() {
 
   const showQueue = (state?.queueCount ?? 0) > 0;
   const isAvailable = state?.session?.availableForService !== false;
+  const hasActiveSession = !!state?.session;
 
   return (
     <Layout title="Módulo Ventanilla">
       {pendingMessage && (
         <WindowMessageModal message={pendingMessage} onAcknowledge={acknowledgeMessage} />
       )}
-      <Card className={`mb-6 border-2 ${isAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+      <Card className={`mb-6 border-2 ${!hasActiveSession ? 'border-slate-200 bg-slate-50' : isAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modo atención</p>
-            <p className={`text-xl font-bold mt-1 ${isAvailable ? 'text-emerald-800' : 'text-amber-800'}`}>
-              {isAvailable ? 'Activo — recibiendo turnos' : 'En pausa — no atiende turnos'}
+            <p className={`text-xl font-bold mt-1 ${
+              !hasActiveSession ? 'text-slate-700' : isAvailable ? 'text-emerald-800' : 'text-amber-800'
+            }`}>
+              {!hasActiveSession
+                ? 'Sin sesión — cierre sesión e ingrese de nuevo'
+                : isAvailable
+                  ? 'Activo — recibiendo turnos'
+                  : 'En pausa — no atiende turnos'}
             </p>
             <p className="text-sm text-slate-600 mt-1">
-              {isAvailable
-                ? 'Use pausa al salir a almorzar o cuando no pueda atender.'
-                : 'El administrador verá esta ventanilla fuera de atención.'}
+              {!hasActiveSession
+                ? 'Al iniciar cada jornada debe volver a ingresar con su usuario.'
+                : isAvailable
+                  ? 'Use pausa al salir a almorzar o cuando no pueda atender.'
+                  : 'El administrador verá esta ventanilla fuera de atención.'}
             </p>
           </div>
           <div className="flex rounded-xl overflow-hidden border border-slate-200 bg-white shrink-0 self-start sm:self-center">
             <button
               type="button"
-              disabled={availabilityLoading || isAvailable || blockedByMessage}
+              disabled={availabilityLoading || !hasActiveSession || isAvailable || blockedByMessage}
               onClick={() => setAvailability(true)}
               className={`px-5 py-3 text-sm font-semibold transition ${
                 isAvailable
@@ -197,7 +208,7 @@ export function WindowPage() {
             </button>
             <button
               type="button"
-              disabled={availabilityLoading || !isAvailable || blockedByMessage}
+              disabled={availabilityLoading || !hasActiveSession || !isAvailable || blockedByMessage}
               onClick={() => setAvailability(false)}
               className={`px-5 py-3 text-sm font-semibold transition border-l border-slate-200 ${
                 !isAvailable
@@ -226,11 +237,15 @@ export function WindowPage() {
             </div>
           ) : (
             <div className="text-center py-16 text-slate-400">
-              <p className="text-xl">{isAvailable ? 'Sin turno activo' : 'Ventanilla en pausa'}</p>
+              <p className="text-xl">
+                {!hasActiveSession ? 'Sesión expirada' : isAvailable ? 'Sin turno activo' : 'Ventanilla en pausa'}
+              </p>
               <p className="text-sm mt-2">
-                {isAvailable
-                  ? 'Presione "Tomar siguiente" para asignar automáticamente'
-                  : 'Active el modo atención para tomar turnos'}
+                {!hasActiveSession
+                  ? 'Use Salir e ingrese de nuevo para iniciar la jornada.'
+                  : isAvailable
+                    ? 'Presione "Tomar siguiente" para asignar automáticamente'
+                    : 'Active el modo atención para tomar turnos'}
               </p>
             </div>
           )}
@@ -238,7 +253,7 @@ export function WindowPage() {
           {error && <p className="text-red-600 text-center mb-4">{error}</p>}
 
           <div className="grid grid-cols-2 gap-3">
-            <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable || blockedByMessage} className="col-span-2 py-4 text-lg" variant="primary">
+            <Button onClick={takeNext} disabled={loading || !!ticket || !isAvailable || !hasActiveSession || blockedByMessage} className="col-span-2 py-4 text-lg" variant="primary">
               Tomar siguiente
             </Button>
             <Button

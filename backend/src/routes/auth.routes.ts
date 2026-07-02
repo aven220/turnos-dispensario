@@ -62,8 +62,21 @@ router.post('/login', async (req, res, next) => {
 
       resolvedWindowId = assignment.windowId;
 
+      const now = new Date();
+      await prisma.operatorSession.updateMany({
+        where: {
+          endedAt: null,
+          OR: [{ userId: user.id }, { windowId: resolvedWindowId }],
+        },
+        data: { endedAt: now },
+      });
+
       await prisma.operatorSession.create({
-        data: { userId: user.id, windowId: resolvedWindowId },
+        data: {
+          userId: user.id,
+          windowId: resolvedWindowId,
+          availableForService: true,
+        },
       });
     }
 
@@ -89,6 +102,25 @@ router.post('/login', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.post('/logout', authMiddleware, async (req, res) => {
+  const userId = req.user!.sub;
+
+  if (req.user!.role === 'WINDOW') {
+    await prisma.operatorSession.updateMany({
+      where: { userId, endedAt: null },
+      data: { endedAt: new Date() },
+    });
+  }
+
+  await logAudit({
+    userId,
+    action: 'LOGOUT',
+    ipAddress: getClientIp(req),
+  });
+
+  res.status(204).send();
 });
 
 router.get('/me', authMiddleware, async (req, res) => {
