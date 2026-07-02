@@ -36,6 +36,15 @@ router.get('/today', requireRoles(UserRole.FILTER, UserRole.ADMIN), async (req, 
   res.json(tickets);
 });
 
+router.get(
+  '/queue-by-priority',
+  requireRoles(UserRole.ADMIN, UserRole.AREA_MANAGER),
+  async (_req, res) => {
+    const summary = await ticketService.getPendingQueueByPriority();
+    res.json(summary);
+  }
+);
+
 router.get('/print-settings', requireRoles(UserRole.FILTER, UserRole.ADMIN), async (_req, res) => {
   const settings = await getTicketPrintSettings();
   res.json(settings);

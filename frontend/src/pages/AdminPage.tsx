@@ -5,6 +5,7 @@ import { TvSpeechConfig } from '../components/TvSpeechConfig';
 import { TicketPrintPreview } from '../components/TicketPrintPreview';
 import { TickerPreview } from '../components/TickerPreview';
 import { WindowsManager } from '../components/WindowsManager';
+import { PriorityQueueSummary } from '../components/PriorityQueueSummary';
 import { WindowMessagesPanel } from '../components/WindowMessagesPanel';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -680,6 +681,7 @@ export function AdminPage() {
 
       {tab === 'windows' && (
         <>
+          <PriorityQueueSummary />
           <WindowMessagesPanel windows={windows} token={token} />
           <WindowsManager
             windows={windows}

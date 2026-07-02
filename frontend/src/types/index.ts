@@ -167,6 +167,17 @@ export interface DayDispensations {
   dispensations: DayDispensation[];
 }
 
+export interface PriorityQueueSummary {
+  datePrefix: string;
+  total: number;
+  byPriority: {
+    priorityId: string;
+    code: string;
+    name: string;
+    count: number;
+  }[];
+}
+
 export interface Stats {
   generated: number;
   attended: number;

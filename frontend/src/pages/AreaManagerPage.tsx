@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { WindowsManager } from '../components/WindowsManager';
+import { PriorityQueueSummary } from '../components/PriorityQueueSummary';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -30,6 +31,7 @@ export function AreaManagerPage() {
       <p className="text-sm text-slate-600 mb-6 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
         Configure el nombre, estado y orden de prioridades de cada ventanilla. No puede crear ventanillas ni gestionar usuarios.
       </p>
+      <PriorityQueueSummary />
       <WindowsManager
         windows={windows}
         priorities={priorities}

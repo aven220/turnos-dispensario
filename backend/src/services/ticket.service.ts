@@ -458,6 +458,36 @@ export class TicketService {
     });
   }
 
+  async getPendingQueueByPriority() {
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+
+    const [priorities, grouped] = await Promise.all([
+      prisma.priority.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+      }),
+      prisma.ticket.groupBy({
+        by: ['priorityId'],
+        where: { datePrefix, status: TicketStatus.GENERADO },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const countMap = new Map(grouped.map((g) => [g.priorityId, g._count._all]));
+
+    const byPriority = priorities.map((p) => ({
+      priorityId: p.id,
+      code: p.code,
+      name: p.name,
+      count: countMap.get(p.id) ?? 0,
+    }));
+
+    const total = byPriority.reduce((sum, p) => sum + p.count, 0);
+
+    return { datePrefix, total, byPriority };
+  }
+
   async getUpcomingForWindow(windowId: string, limit = 3) {
     if (limit <= 0) return [];
 
