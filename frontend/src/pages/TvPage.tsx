@@ -223,16 +223,10 @@ export function TvPage() {
         <button
           type="button"
           onClick={enableSound}
-          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-slate-950/85 backdrop-blur-sm px-6 text-center cursor-pointer"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm cursor-pointer"
         >
-          <p className="text-[clamp(1.25rem,4vw,2rem)] font-bold text-white">
-            Toque la pantalla para activar el sonido
-          </p>
-          <p className="text-[clamp(0.875rem,2.5vw,1.125rem)] text-slate-300 max-w-xl">
-            El televisor no necesita iniciar sesión. Solo un toque al abrir el día para que el navegador permita la voz.
-          </p>
-          <span className="mt-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold text-lg">
-            Activar sonido
+          <span className="px-10 py-4 rounded-xl bg-blue-600 text-white font-bold text-[clamp(1.25rem,4vw,2rem)] tracking-wide">
+            Iniciar
           </span>
         </button>
       )}
