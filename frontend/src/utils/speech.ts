@@ -55,6 +55,30 @@ const PRESET_DEFINITIONS: PresetDefinition[] = [
 ];
 
 let currentSettings: SpeechSettings = { ...DEFAULT_SETTINGS };
+let speechUnlocked = false;
+
+export function isSpeechUnlocked(): boolean {
+  return speechUnlocked;
+}
+
+/** Debe llamarse tras un clic/toque del usuario (política de autoplay del navegador). */
+export function unlockSpeech(): void {
+  if (!('speechSynthesis' in window)) {
+    speechUnlocked = true;
+    return;
+  }
+  speechUnlocked = true;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.resume();
+  const utterance = new SpeechSynthesisUtterance(' ');
+  utterance.volume = 0.01;
+  utterance.rate = 2;
+  utterance.lang = 'es-ES';
+  const voice = pickVoice(loadVoices(), currentSettings);
+  if (voice) utterance.voice = voice;
+  window.speechSynthesis.speak(utterance);
+  wakeSpeechEngine();
+}
 
 function numberToSpanish(num: number): string {
   const units = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];

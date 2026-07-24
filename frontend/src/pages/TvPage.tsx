@@ -3,7 +3,15 @@ import { useTurnoActualHighlight } from '../hooks/useTurnoActualHighlight';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket, TvDisplay } from '../types';
-import { buildCallMessage, enqueueCallSpeech, initSpeech, normalizeVoicePreset, setSpeechSettings } from '../utils/speech';
+import {
+  buildCallMessage,
+  enqueueCallSpeech,
+  initSpeech,
+  isSpeechUnlocked,
+  normalizeVoicePreset,
+  setSpeechSettings,
+  unlockSpeech,
+} from '../utils/speech';
 import { isYoutubeUrl, youtubeEmbedUrl } from '../utils/media';
 import { removePendingCall, sortPendingCalls, upsertPendingCall } from '../utils/tvCalls';
 import { tvScaledFontSize } from '../utils/tvTypography';
@@ -77,7 +85,13 @@ export function TvPage() {
   const [pendingCalls, setPendingCalls] = useState<Ticket[]>([]);
   const [mediaIndex, setMediaIndex] = useState(0);
   const [now, setNow] = useState(() => new Date());
+  const [soundReady, setSoundReady] = useState(() => isSpeechUnlocked());
   const { highlighted, highlight, clearIfTicket } = useTurnoActualHighlight();
+
+  function enableSound() {
+    unlockSpeech();
+    setSoundReady(true);
+  }
 
   const load = useCallback(async () => {
     const data = await api<TvDisplay>('/tv/display');
@@ -204,7 +218,24 @@ export function TvPage() {
   const recentCalls = pendingCalls.filter((t) => t.id !== highlightedId);
 
   return (
-    <div className="h-dvh min-h-dvh max-h-dvh bg-slate-900 text-white flex flex-col overflow-hidden">
+    <div className="h-dvh min-h-dvh max-h-dvh bg-slate-900 text-white flex flex-col overflow-hidden relative">
+      {!soundReady && (
+        <button
+          type="button"
+          onClick={enableSound}
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-slate-950/85 backdrop-blur-sm px-6 text-center cursor-pointer"
+        >
+          <p className="text-[clamp(1.25rem,4vw,2rem)] font-bold text-white">
+            Toque la pantalla para activar el sonido
+          </p>
+          <p className="text-[clamp(0.875rem,2.5vw,1.125rem)] text-slate-300 max-w-xl">
+            El televisor no necesita iniciar sesión. Solo un toque al abrir el día para que el navegador permita la voz.
+          </p>
+          <span className="mt-2 px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold text-lg">
+            Activar sonido
+          </span>
+        </button>
+      )}
       <header className="shrink-0 bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-b border-blue-600 py-3 sm:py-4 lg:py-5 px-4 sm:px-6 text-center">
         <h1
           className="font-bold uppercase text-white tracking-[0.08em] sm:tracking-[0.15em] lg:tracking-[0.2em] leading-tight break-words"
