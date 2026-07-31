@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AttentionReminder } from '../components/AttentionReminder';
+import { WindowChatWidget } from '../components/InternalChat';
 import { Button, Card, Layout } from '../components/Layout';
 import { WindowMessageModal, type PendingWindowMessage } from '../components/WindowMessageModal';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +8,8 @@ import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket } from '../types';
 import { repeatCallCooldownRemaining } from '../utils/callCooldown';
+
+const ATTENTION_REMINDER_MS = 5 * 60 * 1000;
 
 interface WindowState {
   activeTicket: Ticket | null;
@@ -24,9 +28,36 @@ export function WindowPage() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<PendingWindowMessage | null>(null);
   const [repeatCooldownSec, setRepeatCooldownSec] = useState(0);
+  const [showAttentionReminder, setShowAttentionReminder] = useState(false);
+  const [dismissedReminderTicketId, setDismissedReminderTicketId] = useState<string | null>(null);
 
   const ticket = state?.activeTicket;
   const repeatOnCooldown = repeatCooldownSec > 0;
+
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'LLAMADO') {
+      setShowAttentionReminder(false);
+      return;
+    }
+    if (dismissedReminderTicketId === ticket.id) {
+      setShowAttentionReminder(false);
+      return;
+    }
+
+    const startedAt = ticket.calledAt ? new Date(ticket.calledAt).getTime() : Date.now();
+    const check = () => {
+      setShowAttentionReminder(Date.now() - startedAt >= ATTENTION_REMINDER_MS);
+    };
+    check();
+    const interval = setInterval(check, 15000);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.status, ticket?.calledAt, dismissedReminderTicketId]);
+
+  useEffect(() => {
+    if (ticket?.status !== 'LLAMADO') {
+      setDismissedReminderTicketId(null);
+    }
+  }, [ticket?.id, ticket?.status]);
 
   useEffect(() => {
     if (!ticket || ticket.status !== 'LLAMADO') {
@@ -171,6 +202,14 @@ export function WindowPage() {
     <Layout title="Módulo Ventanilla">
       {pendingMessage && (
         <WindowMessageModal message={pendingMessage} onAcknowledge={acknowledgeMessage} />
+      )}
+      {showAttentionReminder && ticket?.status === 'LLAMADO' && (
+        <AttentionReminder
+          onDismiss={() => {
+            setDismissedReminderTicketId(ticket.id);
+            setShowAttentionReminder(false);
+          }}
+        />
       )}
       <Card className={`mb-6 border-2 ${!hasActiveSession ? 'border-slate-200 bg-slate-50' : isAvailable ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -338,6 +377,12 @@ export function WindowPage() {
           )}
         </div>
       </div>
+      {windowId && (
+        <WindowChatWidget
+          windowId={windowId}
+          relatedTicketDisplayCode={ticket?.status === 'ATENDIENDO' ? ticket.displayCode : null}
+        />
+      )}
     </Layout>
   );
 }

@@ -178,6 +178,29 @@ export interface PriorityQueueSummary {
   }[];
 }
 
+export interface ChatSettings {
+  id: string;
+  chatEnabled: boolean;
+  chatSoundEnabled: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  windowId: string;
+  senderId: string;
+  body: string;
+  ticketId?: string | null;
+  ticketDisplayCode?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+  sender: { id: string; fullName: string; role: UserRole };
+}
+
+export interface ChatThread {
+  messages: ChatMessage[];
+  relatedTicket: { id: string; displayCode: string } | null;
+}
+
 export interface Stats {
   generated: number;
   attended: number;

@@ -56,6 +56,7 @@ model User {
   sessions            OperatorSession[]
   messagesSent        WindowMessage[]  @relation("MessageSentBy")
   messagesAcknowledged WindowMessage[] @relation("MessageAcknowledgedBy")
+  chatMessages        ChatMessage[]
 
   @@map("users")
 }
@@ -72,8 +73,9 @@ model Window {
   operators  WindowOperator[]
   tickets    Ticket[]
   sessions   OperatorSession[]
-  auditLogs  AuditLog[]
-  messages   WindowMessage[]
+  auditLogs     AuditLog[]
+  messages      WindowMessage[]
+  chatMessages  ChatMessage[]
 
   @@map("windows")
 }
@@ -277,4 +279,30 @@ model DailyHistory {
 
   @@index([archivedAt])
   @@map("daily_history")
+}
+
+model ChatSettings {
+  id               String  @id @default("default")
+  chatEnabled      Boolean @default(true) @map("chat_enabled")
+  chatSoundEnabled Boolean @default(true) @map("chat_sound_enabled")
+
+  @@map("chat_settings")
+}
+
+model ChatMessage {
+  id                String    @id @default(cuid())
+  windowId          String    @map("window_id")
+  senderId          String    @map("sender_id")
+  body              String
+  ticketId          String?   @map("ticket_id")
+  ticketDisplayCode String?   @map("ticket_display_code")
+  readAt            DateTime? @map("read_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  window Window @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  sender User   @relation(fields: [senderId], references: [id])
+
+  @@index([windowId, createdAt])
+  @@index([windowId, readAt])
+  @@map("chat_messages")
 }

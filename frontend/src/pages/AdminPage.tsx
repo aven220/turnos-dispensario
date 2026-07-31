@@ -7,6 +7,7 @@ import { TickerPreview } from '../components/TickerPreview';
 import { WindowsManager } from '../components/WindowsManager';
 import { PriorityQueueSummary } from '../components/PriorityQueueSummary';
 import { WindowMessagesPanel } from '../components/WindowMessagesPanel';
+import { AdminChatPanel } from '../components/InternalChat';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob, apiUpload } from '../services/api';
@@ -15,7 +16,7 @@ import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
 import { formatDuration } from '../utils/formatDuration';
 
-type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'tv' | 'ticketPrint' | 'audit';
+type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'chat' | 'tv' | 'ticketPrint' | 'audit';
 
 const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   id: 'default',
@@ -471,6 +472,7 @@ export function AdminPage() {
     { id: 'users', label: 'Usuarios' },
     { id: 'windows', label: 'Ventanillas' },
     { id: 'priorities', label: 'Prioridades' },
+    { id: 'chat', label: 'Chat interno' },
     { id: 'tv', label: 'Pantalla TV' },
     { id: 'ticketPrint', label: 'Impresión turno' },
     { id: 'audit', label: 'Auditoría' },
@@ -825,6 +827,8 @@ export function AdminPage() {
           </Card>
         </div>
       )}
+
+      {tab === 'chat' && <AdminChatPanel windows={windows} />}
 
       {tab === 'tv' && (
         <div className="space-y-6">

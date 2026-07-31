@@ -14,6 +14,7 @@ import ticketsRoutes from './routes/tickets.routes.js';
 import tvRoutes from './routes/tv.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import windowsRoutes from './routes/windows.routes.js';
+import chatRoutes from './routes/chat.routes.js';
 import { ensureDailyOperations } from './services/daily-reset.service.js';
 import { setupSocketIO } from './sockets/index.js';
 
@@ -45,6 +46,7 @@ app.use('/api/priorities', prioritiesRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/tv', tvRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/chat', chatRoutes);
 
 if (env.isProduction) {
   const frontendDist = path.join(__dirname, '../../frontend/dist');
