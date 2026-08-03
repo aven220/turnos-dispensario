@@ -212,6 +212,7 @@ export interface ChatParticipant {
   window: { id: string; name: string; number: number } | null;
   unread: number;
   lastMessage: { body: string; createdAt: string } | null;
+  online?: boolean;
 }
 
 export interface Stats {

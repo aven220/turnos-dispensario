@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { ChatMessage, ChatParticipant, ChatSettings, ChatThread } from '../types';
-import { playChatNotifySound } from '../utils/chatSound';
+import { playChatNotifySound, unlockChatSound } from '../utils/chatSound';
 import { Button, Card } from './Layout';
 
 function formatMsgTime(iso: string): string {
@@ -64,12 +64,22 @@ export function ChatConversation({
   const myId = user?.id;
 
   const load = useCallback(async () => {
-    const data = await api<ChatThread>(`/chat/threads/${participantId}`);
-    setMessages(data.messages);
-    setRelatedTicket(data.relatedTicket);
+    if (!participantId) {
+      setError('No se pudo identificar la conversación. Cierre sesión y vuelva a entrar.');
+      return;
+    }
+    try {
+      const data = await api<ChatThread>(`/chat/threads/${participantId}`);
+      setMessages(data.messages);
+      setRelatedTicket(data.relatedTicket);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el chat');
+    }
   }, [participantId]);
 
   const markRead = useCallback(async () => {
+    if (!participantId) return;
     try {
       await api(`/chat/threads/${participantId}/read`, { method: 'POST', body: '{}' });
       onUnreadChange?.();
@@ -91,7 +101,7 @@ export function ChatConversation({
   );
 
   useEffect(() => {
-    load().then(() => markRead());
+    load().then(() => markRead()).catch(() => undefined);
   }, [load, markRead]);
 
   useEffect(() => {
@@ -143,18 +153,25 @@ export function ChatConversation({
 
   async function handleSend(e: FormEvent) {
     e.preventDefault();
-    if (!text.trim() || !settings.chatEnabled) return;
+    const body = text.trim();
+    if (!body || !settings.chatEnabled) return;
+    if (!participantId || !myId) {
+      setError('Sesión inválida. Cierre sesión y vuelva a entrar.');
+      return;
+    }
+    unlockChatSound();
     setSending(true);
     setError('');
     try {
       const msg = await api<ChatMessage>(`/chat/threads/${participantId}`, {
         method: 'POST',
-        body: JSON.stringify({ body: text.trim() }),
+        body: JSON.stringify({ body }),
       });
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       setText('');
+      onUnreadChange?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo enviar');
+      setError(err instanceof Error ? err.message : 'No se pudo enviar el mensaje');
     } finally {
       setSending(false);
     }
@@ -212,11 +229,15 @@ export function ChatConversation({
           className="flex-1 border rounded-lg px-3 py-2 text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onFocus={() => unlockChatSound()}
           placeholder={settings.chatEnabled ? 'Escriba un mensaje...' : 'Chat desactivado'}
           maxLength={1000}
-          disabled={!settings.chatEnabled || sending}
+          disabled={!settings.chatEnabled || sending || !participantId}
         />
-        <Button type="submit" disabled={!settings.chatEnabled || sending || !text.trim()}>
+        <Button
+          type="submit"
+          disabled={!settings.chatEnabled || sending || !text.trim() || !participantId}
+        >
           Enviar
         </Button>
       </form>
@@ -246,6 +267,11 @@ export function AdminChatPanel() {
   }, [loadSettings, loadParticipants]);
 
   useEffect(() => {
+    if (!token) return;
+    getSocket(token);
+  }, [token]);
+
+  useEffect(() => {
     const socket = getSocket(token ?? undefined);
     const onMsg = (msg: ChatMessage) => {
       if (msg.sender?.role === 'ADMIN') return;
@@ -262,11 +288,24 @@ export function AdminChatPanel() {
       );
     };
     const onSettings = (s: ChatSettings) => setSettings(s);
+    const onPresence = (payload: { userId: string; online: boolean }) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === payload.userId ? { ...p, online: payload.online } : p))
+      );
+    };
+    const onPresenceSync = (payload: { onlineUserIds: string[] }) => {
+      const set = new Set(payload.onlineUserIds);
+      setParticipants((prev) => prev.map((p) => ({ ...p, online: set.has(p.id) })));
+    };
     socket.on('chat:message', onMsg);
     socket.on('chat:settings-updated', onSettings);
+    socket.on('chat:presence', onPresence);
+    socket.on('chat:presence-sync', onPresenceSync);
     return () => {
       socket.off('chat:message', onMsg);
       socket.off('chat:settings-updated', onSettings);
+      socket.off('chat:presence', onPresence);
+      socket.off('chat:presence-sync', onPresenceSync);
     };
   }, [token, selectedId]);
 
@@ -282,6 +321,10 @@ export function AdminChatPanel() {
   }
 
   const selected = participants.find((p) => p.id === selectedId);
+  const sortedParticipants = [...participants].sort((a, b) => {
+    if (!!a.online === !!b.online) return a.fullName.localeCompare(b.fullName, 'es');
+    return a.online ? -1 : 1;
+  });
 
   return (
     <div className="space-y-6">
@@ -308,7 +351,8 @@ export function AdminChatPanel() {
           </label>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Comunicación centralizada: cada usuario solo chatea con el Administrador.
+          Comunicación centralizada: cada usuario solo chatea con el Administrador. El punto verde
+          indica quién está conectado ahora.
         </p>
       </Card>
 
@@ -320,8 +364,9 @@ export function AdminChatPanel() {
         <div className="grid lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-1 !p-4">
             <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Usuarios</p>
+            <p className="text-[11px] text-slate-400 mb-2">● Verde = conectado ahora</p>
             <ul className="space-y-1 max-h-[480px] overflow-y-auto">
-              {participants.map((p) => (
+              {sortedParticipants.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
@@ -333,11 +378,20 @@ export function AdminChatPanel() {
                       selectedId === p.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'
                     }`}
                   >
-                    <span className="min-w-0">
-                      <span className="font-medium block truncate">{p.fullName}</span>
-                      <span className={`text-xs ${selectedId === p.id ? 'text-blue-100' : 'text-slate-500'}`}>
-                        {roleLabel(p.role)}
-                        {p.window ? ` · Vent. ${p.window.number}` : ''}
+                    <span className="min-w-0 flex items-start gap-2">
+                      <span
+                        className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${
+                          p.online ? 'bg-emerald-400' : selectedId === p.id ? 'bg-slate-400' : 'bg-slate-300'
+                        }`}
+                        title={p.online ? 'Activo' : 'Desconectado'}
+                      />
+                      <span>
+                        <span className="font-medium block truncate">{p.fullName}</span>
+                        <span className={`text-xs ${selectedId === p.id ? 'text-blue-100' : 'text-slate-500'}`}>
+                          {roleLabel(p.role)}
+                          {p.window ? ` · Vent. ${p.window.number}` : ''}
+                          {p.online ? ' · En línea' : ' · Fuera'}
+                        </span>
                       </span>
                     </span>
                     {p.unread > 0 && (
@@ -379,6 +433,22 @@ export function ChatNavButton() {
   const [selectedId, setSelectedId] = useState<string>('');
   const [flash, setFlash] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
+  const openRef = useRef(false);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  // Desbloquear audio con el primer clic/tecla en la página
+  useEffect(() => {
+    const unlock = () => unlockChatSound();
+    document.addEventListener('pointerdown', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      document.removeEventListener('pointerdown', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+  }, []);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -407,10 +477,12 @@ export function ChatNavButton() {
   }, [isAdmin]);
 
   useEffect(() => {
+    if (!token) return;
+    getSocket(token);
     loadSettings();
     loadUnread();
     loadParticipants();
-  }, [loadSettings, loadUnread, loadParticipants]);
+  }, [token, loadSettings, loadUnread, loadParticipants]);
 
   useEffect(() => {
     if (!user) return;
@@ -418,42 +490,61 @@ export function ChatNavButton() {
   }, [user, isAdmin]);
 
   useEffect(() => {
-    const socket = getSocket(token ?? undefined);
+    if (!token || !user) return;
+    const socket = getSocket(token);
+
     const onSettings = (s: ChatSettings) => setSettings(s);
 
     const onMsg = (msg: ChatMessage) => {
-      if (!user) return;
+      // Evitar ecos / mensajes de otras conversaciones
+      if (!msg?.participantId || !msg?.senderId) return;
+
       const forMe = isAdmin
         ? msg.senderId !== user.id && msg.sender?.role !== 'ADMIN'
         : msg.participantId === user.id && msg.senderId !== user.id;
 
       if (!forMe) return;
 
-      if (settings?.chatSoundEnabled) playChatNotifySound();
+      if (settings?.chatSoundEnabled !== false) playChatNotifySound();
       setFlash(true);
-      setTimeout(() => setFlash(false), 1200);
+      setTimeout(() => setFlash(false), 1500);
 
-      // Auto-abrir chat
+      // Auto-abrir siempre que llegue un mensaje dirigido a mí
       setOpen(true);
       if (isAdmin) {
         setSelectedId(msg.participantId);
         loadParticipants();
+      } else {
+        setSelectedId(user.id);
       }
       loadUnread();
 
-      // Confirmar entrega
       if (msg.senderId !== user.id) {
         api(`/chat/messages/${msg.id}/delivered`, { method: 'POST', body: '{}' }).catch(() => undefined);
       }
     };
 
+    const onPresence = (payload: { userId: string; online: boolean }) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === payload.userId ? { ...p, online: payload.online } : p))
+      );
+    };
+    const onPresenceSync = (payload: { onlineUserIds: string[] }) => {
+      const set = new Set(payload.onlineUserIds);
+      setParticipants((prev) => prev.map((p) => ({ ...p, online: set.has(p.id) })));
+    };
+
     socket.on('chat:settings-updated', onSettings);
     socket.on('chat:message', onMsg);
     socket.on('chat:read', loadUnread);
+    socket.on('chat:presence', onPresence);
+    socket.on('chat:presence-sync', onPresenceSync);
     return () => {
       socket.off('chat:settings-updated', onSettings);
       socket.off('chat:message', onMsg);
       socket.off('chat:read', loadUnread);
+      socket.off('chat:presence', onPresence);
+      socket.off('chat:presence-sync', onPresenceSync);
     };
   }, [token, user, isAdmin, settings?.chatSoundEnabled, loadUnread, loadParticipants]);
 
@@ -466,18 +557,26 @@ export function ChatNavButton() {
       ? `${selected.fullName} · ${roleLabel(selected.role)}`
       : 'Seleccione un usuario'
     : 'Chat con administración';
+  const sortedParticipants = [...participants].sort((a, b) => {
+    if (!!a.online === !!b.online) return a.fullName.localeCompare(b.fullName, 'es');
+    return a.online ? -1 : 1;
+  });
 
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => {
+          unlockChatSound();
           setOpen((v) => !v);
-          if (!open) loadUnread();
+          if (!openRef.current) {
+            loadUnread();
+            loadParticipants();
+          }
         }}
         className={`relative text-sm px-3 py-1.5 rounded-lg font-medium transition ${
           unread > 0 || flash
-            ? 'bg-amber-400 text-amber-950 hover:bg-amber-300'
+            ? 'bg-amber-400 text-amber-950 hover:bg-amber-300 ring-2 ring-amber-200'
             : 'bg-slate-700 hover:bg-slate-600 text-white'
         }`}
       >
@@ -490,7 +589,7 @@ export function ChatNavButton() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[min(100vw-2rem,26rem)] bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 p-4 z-50">
+        <div className="fixed right-3 top-16 sm:right-6 w-[min(100vw-1.5rem,26rem)] bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 p-4 z-[200]">
           <div className="flex justify-between items-center mb-2">
             <p className="font-semibold text-sm">Chat interno</p>
             <button type="button" className="text-slate-400 hover:text-slate-700 text-sm" onClick={() => setOpen(false)}>
@@ -499,21 +598,25 @@ export function ChatNavButton() {
           </div>
 
           {isAdmin && (
-            <div className="mb-3 max-h-32 overflow-y-auto space-y-1 border-b border-slate-100 pb-2">
-              {participants.map((p) => (
+            <div className="mb-3 max-h-36 overflow-y-auto space-y-1 border-b border-slate-100 pb-2">
+              <p className="text-[10px] text-slate-400 px-1 mb-1">● En línea / ○ Fuera</p>
+              {sortedParticipants.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => setSelectedId(p.id)}
-                  className={`w-full text-left text-xs px-2 py-1.5 rounded flex justify-between ${
+                  className={`w-full text-left text-xs px-2 py-1.5 rounded flex justify-between items-center gap-2 ${
                     selectedId === p.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
                   }`}
                 >
-                  <span className="truncate">
-                    {p.fullName} · {roleLabel(p.role)}
+                  <span className="truncate flex items-center gap-1.5 min-w-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${p.online ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <span className="truncate">
+                      {p.fullName} · {roleLabel(p.role)}
+                    </span>
                   </span>
                   {p.unread > 0 && (
-                    <span className="font-bold text-amber-700 ml-2">{p.unread}</span>
+                    <span className="font-bold text-amber-700 ml-2 shrink-0">{p.unread}</span>
                   )}
                 </button>
               ))}

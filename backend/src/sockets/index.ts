@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { env } from '../config/env.js';
 import type { AuthPayload } from '../middleware/auth.js';
+import { getOnlineUserIds, trackUserOffline, trackUserOnline } from '../utils/chat-presence.js';
 
 let io: Server;
 
@@ -42,6 +43,26 @@ export function setupSocketIO(httpServer: HttpServer): Server {
   io.on('connection', (socket) => {
     socket.on('join:tv', () => socket.join('tv'));
     socket.on('join:window', (windowId: string) => socket.join(`window:${windowId}`));
+
+    const user = socket.data.user as AuthPayload | undefined;
+    if (user?.sub) {
+      const becameOnline = trackUserOnline(user.sub);
+      if (becameOnline) {
+        io.to('chat:admins').emit('chat:presence', { userId: user.sub, online: true });
+      }
+      // Admin que se conecta recibe snapshot de quién está en línea
+      if (user.role === 'ADMIN') {
+        socket.emit('chat:presence-sync', { onlineUserIds: getOnlineUserIds() });
+      }
+    }
+
+    socket.on('disconnect', () => {
+      if (!user?.sub) return;
+      const becameOffline = trackUserOffline(user.sub);
+      if (becameOffline) {
+        io.to('chat:admins').emit('chat:presence', { userId: user.sub, online: false });
+      }
+    });
   });
 
   return io;

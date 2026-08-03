@@ -1,6 +1,7 @@
 import { TicketStatus, UserRole } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { getIO } from '../sockets/index.js';
+import { getOnlineUserIds, isUserOnline } from '../utils/chat-presence.js';
 
 const MESSAGE_INCLUDE = {
   sender: { select: { id: true, fullName: true, role: true } },
@@ -9,27 +10,69 @@ const MESSAGE_INCLUDE = {
 function emitChatSettings(settings: { chatEnabled: boolean; chatSoundEnabled: boolean }) {
   try {
     const io = getIO();
-    io.to('chat:admins').emit('chat:settings-updated', settings);
-    io.to('windows').emit('chat:settings-updated', settings);
-    io.to('filter').emit('chat:settings-updated', settings);
-    io.to('role:AREA_MANAGER').emit('chat:settings-updated', settings);
-    io.to('role:AUDITOR').emit('chat:settings-updated', settings);
+    io.emit('chat:settings-updated', settings);
   } catch {
     // socket no listo
   }
 }
 
-function emitChatMessage(msg: {
+function toChatPayload(msg: {
   id: string;
   participantId: string;
-  senderId: string;
   windowId?: string | null;
+  senderId: string;
+  body: string;
+  ticketId?: string | null;
+  ticketDisplayCode?: string | null;
+  deliveredAt?: Date | null;
+  readAt?: Date | null;
+  createdAt: Date;
+  sender: { id: string; fullName: string; role: UserRole };
 }) {
+  return {
+    id: msg.id,
+    participantId: msg.participantId,
+    windowId: msg.windowId ?? null,
+    senderId: msg.senderId,
+    body: msg.body,
+    ticketId: msg.ticketId ?? null,
+    ticketDisplayCode: msg.ticketDisplayCode ?? null,
+    deliveredAt: msg.deliveredAt,
+    readAt: msg.readAt,
+    createdAt: msg.createdAt,
+    sender: msg.sender,
+  };
+}
+
+function emitChatMessage(
+  msg: {
+    id: string;
+    participantId: string;
+    windowId?: string | null;
+    senderId: string;
+    body: string;
+    ticketId?: string | null;
+    ticketDisplayCode?: string | null;
+    deliveredAt?: Date | null;
+    readAt?: Date | null;
+    createdAt: Date;
+    sender: { id: string; fullName: string; role: UserRole };
+  },
+  participantRole: UserRole
+) {
   try {
     const io = getIO();
-    const payload = { ...msg, windowId: msg.windowId ?? null };
+    const payload = toChatPayload(msg);
+    // Destinatario directo + sala de rol (por si el socket no está en user:id)
     io.to(`user:${msg.participantId}`).emit('chat:message', payload);
+    if (participantRole !== UserRole.ADMIN) {
+      io.to(`role:${participantRole}`).emit('chat:message', payload);
+    }
     io.to('chat:admins').emit('chat:message', payload);
+    // También al remitente no-admin por si envía y tiene otra pestaña
+    if (msg.senderId !== msg.participantId) {
+      io.to(`user:${msg.senderId}`).emit('chat:message', payload);
+    }
   } catch {
     // ignore
   }
@@ -120,6 +163,7 @@ export async function listChatParticipants() {
     window: u.windowAssignments[0]?.window ?? null,
     unread: unreadMap.get(u.id) ?? 0,
     lastMessage: lastMap.get(u.id) ?? null,
+    online: isUserOnline(u.id),
   }));
 }
 
@@ -188,7 +232,7 @@ export async function sendChatMessage(params: {
     include: MESSAGE_INCLUDE,
   });
 
-  emitChatMessage(created);
+  emitChatMessage(created, participant.role);
   return created;
 }
 
@@ -280,4 +324,8 @@ export async function getUnreadForUser(userId: string, role: UserRole) {
     },
   });
   return { total: count, byParticipant: count > 0 ? [{ participantId: userId, count }] : [] };
+}
+
+export function listOnlineUserIds() {
+  return getOnlineUserIds();
 }

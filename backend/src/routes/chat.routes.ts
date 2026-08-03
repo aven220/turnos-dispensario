@@ -7,6 +7,7 @@ import {
   getUnreadForUser,
   listChatMessages,
   listChatParticipants,
+  listOnlineUserIds,
   markChatRead,
   markMessageDelivered,
   sendChatMessage,
@@ -53,6 +54,10 @@ router.get('/unread', requireRoles(...ALL_ROLES), async (req, res) => {
 router.get('/participants', requireRoles(UserRole.ADMIN), async (_req, res) => {
   const participants = await listChatParticipants();
   res.json(participants);
+});
+
+router.get('/online', requireRoles(UserRole.ADMIN), async (_req, res) => {
+  res.json({ onlineUserIds: listOnlineUserIds() });
 });
 
 router.get('/threads/:userId', requireRoles(...ALL_ROLES), async (req, res, next) => {
