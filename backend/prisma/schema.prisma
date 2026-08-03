@@ -54,9 +54,10 @@ model User {
   ticketsCreated      Ticket[]         @relation("TicketCreatedBy")
   auditLogs           AuditLog[]
   sessions            OperatorSession[]
-  messagesSent        WindowMessage[]  @relation("MessageSentBy")
-  messagesAcknowledged WindowMessage[] @relation("MessageAcknowledgedBy")
-  chatMessages        ChatMessage[]
+  messagesSent         WindowMessage[]  @relation("MessageSentBy")
+  messagesAcknowledged WindowMessage[]  @relation("MessageAcknowledgedBy")
+  chatMessages         ChatMessage[]    @relation("ChatSender")
+  chatParticipations   ChatMessage[]    @relation("ChatParticipant")
 
   @@map("users")
 }
@@ -291,18 +292,22 @@ model ChatSettings {
 
 model ChatMessage {
   id                String    @id @default(cuid())
-  windowId          String    @map("window_id")
+  participantId     String    @map("participant_id")
+  windowId          String?   @map("window_id")
   senderId          String    @map("sender_id")
   body              String
   ticketId          String?   @map("ticket_id")
   ticketDisplayCode String?   @map("ticket_display_code")
+  deliveredAt       DateTime? @map("delivered_at")
   readAt            DateTime? @map("read_at")
   createdAt         DateTime  @default(now()) @map("created_at")
 
-  window Window @relation(fields: [windowId], references: [id], onDelete: Cascade)
-  sender User   @relation(fields: [senderId], references: [id])
+  participant User    @relation("ChatParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  window      Window? @relation(fields: [windowId], references: [id], onDelete: SetNull)
+  sender      User    @relation("ChatSender", fields: [senderId], references: [id])
 
+  @@index([participantId, createdAt])
+  @@index([participantId, readAt])
   @@index([windowId, createdAt])
-  @@index([windowId, readAt])
   @@map("chat_messages")
 }

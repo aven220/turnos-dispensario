@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AttentionReminder } from '../components/AttentionReminder';
-import { WindowChatWidget } from '../components/InternalChat';
 import { Button, Card, Layout } from '../components/Layout';
 import { WindowMessageModal, type PendingWindowMessage } from '../components/WindowMessageModal';
 import { useAuth } from '../context/AuthContext';
@@ -377,12 +376,6 @@ export function WindowPage() {
           )}
         </div>
       </div>
-      {windowId && (
-        <WindowChatWidget
-          windowId={windowId}
-          relatedTicketDisplayCode={ticket?.status === 'ATENDIENDO' ? ticket.displayCode : null}
-        />
-      )}
     </Layout>
   );
 }

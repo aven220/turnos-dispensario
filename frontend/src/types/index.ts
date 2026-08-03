@@ -186,11 +186,13 @@ export interface ChatSettings {
 
 export interface ChatMessage {
   id: string;
-  windowId: string;
+  participantId: string;
+  windowId?: string | null;
   senderId: string;
   body: string;
   ticketId?: string | null;
   ticketDisplayCode?: string | null;
+  deliveredAt?: string | null;
   readAt?: string | null;
   createdAt: string;
   sender: { id: string; fullName: string; role: UserRole };
@@ -199,6 +201,17 @@ export interface ChatMessage {
 export interface ChatThread {
   messages: ChatMessage[];
   relatedTicket: { id: string; displayCode: string } | null;
+  participantId?: string | null;
+}
+
+export interface ChatParticipant {
+  id: string;
+  fullName: string;
+  username: string;
+  role: UserRole;
+  window: { id: string; name: string; number: number } | null;
+  unread: number;
+  lastMessage: { body: string; createdAt: string } | null;
 }
 
 export interface Stats {

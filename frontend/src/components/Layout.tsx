@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { AccountMenu } from './AccountMenu';
+import { ChatNavButton } from './InternalChat';
 import { useAuth } from '../context/AuthContext';
 
 export function Layout({ children, title }: { children: React.ReactNode; title: string }) {
@@ -15,6 +16,7 @@ export function Layout({ children, title }: { children: React.ReactNode; title: 
           )}
         </div>
         <div className="flex items-center gap-4">
+          {user && <ChatNavButton />}
           {user?.role === 'ADMIN' && (
             <>
               <Link to="/admin" className="text-sm hover:text-blue-300">Panel</Link>

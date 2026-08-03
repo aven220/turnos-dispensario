@@ -6,6 +6,35 @@ const MESSAGE_INCLUDE = {
   sender: { select: { id: true, fullName: true, role: true } },
 } as const;
 
+function emitChatSettings(settings: { chatEnabled: boolean; chatSoundEnabled: boolean }) {
+  try {
+    const io = getIO();
+    io.to('chat:admins').emit('chat:settings-updated', settings);
+    io.to('windows').emit('chat:settings-updated', settings);
+    io.to('filter').emit('chat:settings-updated', settings);
+    io.to('role:AREA_MANAGER').emit('chat:settings-updated', settings);
+    io.to('role:AUDITOR').emit('chat:settings-updated', settings);
+  } catch {
+    // socket no listo
+  }
+}
+
+function emitChatMessage(msg: {
+  id: string;
+  participantId: string;
+  senderId: string;
+  windowId?: string | null;
+}) {
+  try {
+    const io = getIO();
+    const payload = { ...msg, windowId: msg.windowId ?? null };
+    io.to(`user:${msg.participantId}`).emit('chat:message', payload);
+    io.to('chat:admins').emit('chat:message', payload);
+  } catch {
+    // ignore
+  }
+}
+
 export async function getChatSettings() {
   return prisma.chatSettings.upsert({
     where: { id: 'default' },
@@ -27,14 +56,7 @@ export async function updateChatSettings(data: { chatEnabled?: boolean; chatSoun
       ...(data.chatSoundEnabled !== undefined && { chatSoundEnabled: data.chatSoundEnabled }),
     },
   });
-
-  try {
-    getIO().to('admin').emit('chat:settings-updated', settings);
-    getIO().to('windows').emit('chat:settings-updated', settings);
-  } catch {
-    // socket no listo
-  }
-
+  emitChatSettings(settings);
   return settings;
 }
 
@@ -48,26 +70,72 @@ async function assertChatEnabled() {
   return settings;
 }
 
-async function relatedTicketForWindow(windowId: string) {
+async function relatedTicketForUser(userId: string) {
+  const assignment = await prisma.windowOperator.findUnique({ where: { userId } });
+  if (!assignment) return null;
   return prisma.ticket.findFirst({
-    where: { windowId, status: TicketStatus.ATENDIENDO },
+    where: { windowId: assignment.windowId, status: TicketStatus.ATENDIENDO },
     select: { id: true, displayCode: true },
   });
 }
 
-export async function listChatMessages(windowId: string, limit = 100) {
+async function windowIdForUser(userId: string) {
+  const assignment = await prisma.windowOperator.findUnique({ where: { userId } });
+  return assignment?.windowId ?? null;
+}
+
+export async function listChatParticipants() {
+  const users = await prisma.user.findMany({
+    where: { role: { not: UserRole.ADMIN }, status: 'ACTIVE' },
+    select: {
+      id: true,
+      fullName: true,
+      username: true,
+      role: true,
+      windowAssignments: { include: { window: { select: { id: true, name: true, number: true } } } },
+    },
+    orderBy: { fullName: 'asc' },
+  });
+
+  const unread = await prisma.chatMessage.groupBy({
+    by: ['participantId'],
+    where: { readAt: null, sender: { role: { not: UserRole.ADMIN } } },
+    _count: { _all: true },
+  });
+  const unreadMap = new Map(unread.map((u) => [u.participantId, u._count._all]));
+
+  const lastMessages = await prisma.chatMessage.findMany({
+    where: { participantId: { in: users.map((u) => u.id) } },
+    orderBy: { createdAt: 'desc' },
+    distinct: ['participantId'],
+    select: { participantId: true, body: true, createdAt: true },
+  });
+  const lastMap = new Map(lastMessages.map((m) => [m.participantId, m]));
+
+  return users.map((u) => ({
+    id: u.id,
+    fullName: u.fullName,
+    username: u.username,
+    role: u.role,
+    window: u.windowAssignments[0]?.window ?? null,
+    unread: unreadMap.get(u.id) ?? 0,
+    lastMessage: lastMap.get(u.id) ?? null,
+  }));
+}
+
+export async function listChatMessages(participantId: string, limit = 100) {
   const messages = await prisma.chatMessage.findMany({
-    where: { windowId },
+    where: { participantId },
     include: MESSAGE_INCLUDE,
     orderBy: { createdAt: 'asc' },
     take: Math.min(limit, 200),
   });
-  const relatedTicket = await relatedTicketForWindow(windowId);
-  return { messages, relatedTicket };
+  const relatedTicket = await relatedTicketForUser(participantId);
+  return { messages, relatedTicket, participantId };
 }
 
 export async function sendChatMessage(params: {
-  windowId: string;
+  participantId: string;
   senderId: string;
   senderRole: UserRole;
   body: string;
@@ -86,18 +154,32 @@ export async function sendChatMessage(params: {
     throw err;
   }
 
-  const window = await prisma.window.findUnique({ where: { id: params.windowId } });
-  if (!window) {
-    const err = new Error('Ventanilla no encontrada') as Error & { statusCode?: number };
+  const participant = await prisma.user.findUnique({ where: { id: params.participantId } });
+  if (!participant || participant.role === UserRole.ADMIN) {
+    const err = new Error('Conversación no válida') as Error & { statusCode?: number };
     err.statusCode = 404;
     throw err;
   }
 
-  const related = await relatedTicketForWindow(params.windowId);
+  // Solo Admin ↔ Usuario: el remitente debe ser admin o el propio participante
+  if (params.senderRole !== UserRole.ADMIN && params.senderId !== params.participantId) {
+    const err = new Error('Solo puede chatear con el administrador') as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
+  if (params.senderRole === UserRole.ADMIN && params.senderId === params.participantId) {
+    const err = new Error('Conversación no válida') as Error & { statusCode?: number };
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const windowId = await windowIdForUser(params.participantId);
+  const related = await relatedTicketForUser(params.participantId);
 
   const created = await prisma.chatMessage.create({
     data: {
-      windowId: params.windowId,
+      participantId: params.participantId,
+      windowId,
       senderId: params.senderId,
       body: text,
       ticketId: related?.id,
@@ -106,73 +188,96 @@ export async function sendChatMessage(params: {
     include: MESSAGE_INCLUDE,
   });
 
-  try {
-    const io = getIO();
-    io.to(`window:${params.windowId}`).emit('chat:message', created);
-    io.to('admin').emit('chat:message', { ...created, windowId: params.windowId });
-  } catch {
-    // ignore
-  }
-
+  emitChatMessage(created);
   return created;
 }
 
-export async function markChatRead(windowId: string, readerRole: UserRole) {
-  // Marca como leídos los mensajes del otro lado
-  const otherRoles =
-    readerRole === UserRole.ADMIN
-      ? [UserRole.WINDOW]
-      : [UserRole.ADMIN];
-
-  await prisma.chatMessage.updateMany({
-    where: {
-      windowId,
-      readAt: null,
-      sender: { role: { in: otherRoles } },
-    },
-    data: { readAt: new Date() },
-  });
+export async function markChatRead(participantId: string, readerId: string, readerRole: UserRole) {
+  if (readerRole === UserRole.ADMIN) {
+    await prisma.chatMessage.updateMany({
+      where: {
+        participantId,
+        readAt: null,
+        senderId: { not: readerId },
+        sender: { role: { not: UserRole.ADMIN } },
+      },
+      data: { readAt: new Date() },
+    });
+  } else {
+    await prisma.chatMessage.updateMany({
+      where: {
+        participantId,
+        readAt: null,
+        sender: { role: UserRole.ADMIN },
+      },
+      data: { readAt: new Date() },
+    });
+  }
 
   try {
     const io = getIO();
-    io.to(`window:${windowId}`).emit('chat:read', { windowId, readerRole });
-    io.to('admin').emit('chat:read', { windowId, readerRole });
+    const payload = { participantId, readerRole };
+    io.to(`user:${participantId}`).emit('chat:read', payload);
+    io.to('chat:admins').emit('chat:read', payload);
   } catch {
     // ignore
   }
 }
 
-export async function getUnreadCounts(forRole: UserRole) {
-  const settings = await getChatSettings();
-  if (!settings.chatEnabled) {
-    return { total: 0, byWindow: [] as { windowId: string; count: number }[] };
-  }
+export async function markMessageDelivered(messageId: string, receiverId: string, receiverRole: UserRole) {
+  const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+  if (!msg || msg.deliveredAt) return msg;
 
-  const otherRole = forRole === UserRole.ADMIN ? UserRole.WINDOW : UserRole.ADMIN;
+  const fromAdmin = msg.senderId !== msg.participantId;
+  const allowed =
+    (fromAdmin && receiverId === msg.participantId) ||
+    (!fromAdmin && receiverRole === UserRole.ADMIN);
 
-  const unread = await prisma.chatMessage.groupBy({
-    by: ['windowId'],
-    where: {
-      readAt: null,
-      sender: { role: otherRole },
-    },
-    _count: { _all: true },
+  if (!allowed) return msg;
+
+  const updated = await prisma.chatMessage.update({
+    where: { id: messageId },
+    data: { deliveredAt: new Date() },
+    include: MESSAGE_INCLUDE,
   });
 
-  const byWindow = unread.map((u) => ({ windowId: u.windowId, count: u._count._all }));
-  const total = byWindow.reduce((s, w) => s + w.count, 0);
-  return { total, byWindow };
+  try {
+    const io = getIO();
+    const payload = {
+      id: updated.id,
+      participantId: updated.participantId,
+      deliveredAt: updated.deliveredAt,
+    };
+    io.to(`user:${msg.senderId}`).emit('chat:delivered', payload);
+    io.to('chat:admins').emit('chat:delivered', payload);
+  } catch {
+    // ignore
+  }
+  return updated;
 }
 
-export async function getUnreadForWindow(windowId: string) {
+export async function getUnreadForUser(userId: string, role: UserRole) {
   const settings = await getChatSettings();
-  if (!settings.chatEnabled) return 0;
+  if (!settings.chatEnabled) {
+    return { total: 0, byParticipant: [] as { participantId: string; count: number }[] };
+  }
 
-  return prisma.chatMessage.count({
+  if (role === UserRole.ADMIN) {
+    const unread = await prisma.chatMessage.groupBy({
+      by: ['participantId'],
+      where: { readAt: null, sender: { role: { not: UserRole.ADMIN } } },
+      _count: { _all: true },
+    });
+    const byParticipant = unread.map((u) => ({ participantId: u.participantId, count: u._count._all }));
+    return { total: byParticipant.reduce((s, x) => s + x.count, 0), byParticipant };
+  }
+
+  const count = await prisma.chatMessage.count({
     where: {
-      windowId,
+      participantId: userId,
       readAt: null,
       sender: { role: UserRole.ADMIN },
     },
   });
+  return { total: count, byParticipant: count > 0 ? [{ participantId: userId, count }] : [] };
 }

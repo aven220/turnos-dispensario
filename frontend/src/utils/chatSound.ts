@@ -1,20 +1,32 @@
-/** Sonido corto y discreto para mensajes del chat (sin archivos externos). */
+/** Sonido de notificación claro y corto (una vez por mensaje). */
 export function playChatNotifySound() {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.value = 0.04;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-    osc.stop(ctx.currentTime + 0.2);
-    setTimeout(() => ctx.close().catch(() => undefined), 300);
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const playTone = (freq: number, start: number, dur: number, vol: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + dur + 0.02);
+    };
+
+    // Dos tonos cortos y nítidos
+    playTone(988, now, 0.12, 0.22);
+    playTone(1319, now + 0.14, 0.16, 0.2);
+
+    setTimeout(() => ctx.close().catch(() => undefined), 500);
   } catch {
     // silencioso si el navegador bloquea audio
   }

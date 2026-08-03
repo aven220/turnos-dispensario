@@ -828,7 +828,7 @@ export function AdminPage() {
         </div>
       )}
 
-      {tab === 'chat' && <AdminChatPanel windows={windows} />}
+      {tab === 'chat' && <AdminChatPanel />}
 
       {tab === 'tv' && (
         <div className="space-y-6">

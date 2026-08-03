@@ -25,7 +25,10 @@ export function setupSocketIO(httpServer: HttpServer): Server {
       socket.data.user = payload;
       socket.join(`user:${payload.sub}`);
       socket.join(`role:${payload.role}`);
-      if (payload.role === 'ADMIN') socket.join('admin');
+      if (payload.role === 'ADMIN') {
+        socket.join('admin');
+        socket.join('chat:admins');
+      }
       if (payload.role === 'AREA_MANAGER') socket.join('admin');
       if (payload.role === 'AUDITOR') socket.join('admin');
       if (payload.role === 'WINDOW') socket.join('windows');
