@@ -33,7 +33,10 @@ const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
 
 export function AdminPage() {
   const { token } = useAuth();
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const [tab, setTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'chat' ? 'chat' : 'dashboard';
+  });
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [windows, setWindows] = useState<Window[]>([]);
@@ -181,6 +184,34 @@ export function AdminPage() {
     if (tab === 'tv') loadTvConfig();
     if (tab === 'ticketPrint') loadTicketPrintConfig();
   }, [tab]);
+
+  useEffect(() => {
+    const openChat = () => setTab('chat');
+    window.addEventListener('admin:open-chat', openChat);
+    return () => window.removeEventListener('admin:open-chat', openChat);
+  }, []);
+
+  const [chatUnread, setChatUnread] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const refreshUnread = async () => {
+      try {
+        const data = await api<{ total: number }>('/chat/unread');
+        if (!cancelled) setChatUnread(data.total);
+      } catch {
+        if (!cancelled) setChatUnread(0);
+      }
+    };
+    refreshUnread();
+    const socket = getSocket(token ?? undefined);
+    socket.on('chat:message', refreshUnread);
+    socket.on('chat:read', refreshUnread);
+    return () => {
+      cancelled = true;
+      socket.off('chat:message', refreshUnread);
+      socket.off('chat:read', refreshUnread);
+    };
+  }, [token, tab]);
 
   async function updateUser(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -508,6 +539,11 @@ export function AdminPage() {
             }`}
           >
             {t.label}
+            {t.id === 'chat' && chatUnread > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-400 text-amber-950 text-xs font-bold">
+                {chatUnread > 99 ? '99+' : chatUnread}
+              </span>
+            )}
           </button>
         ))}
       </div>

@@ -301,11 +301,19 @@ export function AdminChatPanel() {
     socket.on('chat:settings-updated', onSettings);
     socket.on('chat:presence', onPresence);
     socket.on('chat:presence-sync', onPresenceSync);
+    const onRead = (payload: { participantId: string }) => {
+      // Solo ese hilo deja de tener no leídos; el resto se mantiene
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === payload.participantId ? { ...p, unread: 0 } : p))
+      );
+    };
+    socket.on('chat:read', onRead);
     return () => {
       socket.off('chat:message', onMsg);
       socket.off('chat:settings-updated', onSettings);
       socket.off('chat:presence', onPresence);
       socket.off('chat:presence-sync', onPresenceSync);
+      socket.off('chat:read', onRead);
     };
   }, [token, selectedId]);
 
@@ -321,9 +329,13 @@ export function AdminChatPanel() {
   }
 
   const selected = participants.find((p) => p.id === selectedId);
+  // Primero con no leídos, luego en línea, luego nombre
   const sortedParticipants = [...participants].sort((a, b) => {
-    if (!!a.online === !!b.online) return a.fullName.localeCompare(b.fullName, 'es');
-    return a.online ? -1 : 1;
+    const au = a.unread > 0 ? 1 : 0;
+    const bu = b.unread > 0 ? 1 : 0;
+    if (au !== bu) return bu - au;
+    if (!!a.online !== !!b.online) return a.online ? -1 : 1;
+    return a.fullName.localeCompare(b.fullName, 'es');
   });
 
   return (
@@ -351,8 +363,8 @@ export function AdminChatPanel() {
           </label>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Comunicación centralizada: cada usuario solo chatea con el Administrador. El punto verde
-          indica quién está conectado ahora.
+          Cada usuario solo chatea con el Administrador. El punto verde = conectado. La insignia ámbar
+          = mensajes sin leer (solo se limpia al abrir ese chat).
         </p>
       </Card>
 
@@ -364,15 +376,20 @@ export function AdminChatPanel() {
         <div className="grid lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-1 !p-4">
             <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Usuarios</p>
-            <p className="text-[11px] text-slate-400 mb-2">● Verde = conectado ahora</p>
+            <p className="text-[11px] text-slate-400 mb-2">
+              ● Verde = en línea · Insignia = sin leer (se conserva por chat)
+            </p>
             <ul className="space-y-1 max-h-[480px] overflow-y-auto">
               {sortedParticipants.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
                     onClick={() => {
+                      // Solo limpia el badge de ESTE chat; los demás se conservan
                       setSelectedId(p.id);
-                      setParticipants((prev) => prev.map((x) => (x.id === p.id ? { ...x, unread: 0 } : x)));
+                      setParticipants((prev) =>
+                        prev.map((x) => (x.id === p.id ? { ...x, unread: 0 } : x))
+                      );
                     }}
                     className={`w-full text-left px-3 py-2.5 rounded-lg text-sm flex justify-between items-center gap-2 ${
                       selectedId === p.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'
@@ -429,8 +446,6 @@ export function ChatNavButton() {
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [participants, setParticipants] = useState<ChatParticipant[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('');
   const [flash, setFlash] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const openRef = useRef(false);
@@ -467,27 +482,12 @@ export function ChatNavButton() {
     }
   }, []);
 
-  const loadParticipants = useCallback(async () => {
-    if (!isAdmin) return;
-    try {
-      setParticipants(await api<ChatParticipant[]>('/chat/participants'));
-    } catch {
-      setParticipants([]);
-    }
-  }, [isAdmin]);
-
   useEffect(() => {
     if (!token) return;
     getSocket(token);
     loadSettings();
     loadUnread();
-    loadParticipants();
-  }, [token, loadSettings, loadUnread, loadParticipants]);
-
-  useEffect(() => {
-    if (!user) return;
-    if (!isAdmin) setSelectedId(user.id);
-  }, [user, isAdmin]);
+  }, [token, loadSettings, loadUnread]);
 
   useEffect(() => {
     if (!token || !user) return;
@@ -496,7 +496,6 @@ export function ChatNavButton() {
     const onSettings = (s: ChatSettings) => setSettings(s);
 
     const onMsg = (msg: ChatMessage) => {
-      // Evitar ecos / mensajes de otras conversaciones
       if (!msg?.participantId || !msg?.senderId) return;
 
       const forMe = isAdmin
@@ -508,60 +507,60 @@ export function ChatNavButton() {
       if (settings?.chatSoundEnabled !== false) playChatNotifySound();
       setFlash(true);
       setTimeout(() => setFlash(false), 1500);
-
-      // Auto-abrir siempre que llegue un mensaje dirigido a mí
-      setOpen(true);
-      if (isAdmin) {
-        setSelectedId(msg.participantId);
-        loadParticipants();
-      } else {
-        setSelectedId(user.id);
-      }
       loadUnread();
+
+      // Auto-abrir SOLO para usuarios (el admin usa el apartado Chat interno)
+      if (!isAdmin) {
+        setOpen(true);
+      }
 
       if (msg.senderId !== user.id) {
         api(`/chat/messages/${msg.id}/delivered`, { method: 'POST', body: '{}' }).catch(() => undefined);
       }
     };
 
-    const onPresence = (payload: { userId: string; online: boolean }) => {
-      setParticipants((prev) =>
-        prev.map((p) => (p.id === payload.userId ? { ...p, online: payload.online } : p))
-      );
-    };
-    const onPresenceSync = (payload: { onlineUserIds: string[] }) => {
-      const set = new Set(payload.onlineUserIds);
-      setParticipants((prev) => prev.map((p) => ({ ...p, online: set.has(p.id) })));
-    };
-
     socket.on('chat:settings-updated', onSettings);
     socket.on('chat:message', onMsg);
     socket.on('chat:read', loadUnread);
-    socket.on('chat:presence', onPresence);
-    socket.on('chat:presence-sync', onPresenceSync);
     return () => {
       socket.off('chat:settings-updated', onSettings);
       socket.off('chat:message', onMsg);
       socket.off('chat:read', loadUnread);
-      socket.off('chat:presence', onPresence);
-      socket.off('chat:presence-sync', onPresenceSync);
     };
-  }, [token, user, isAdmin, settings?.chatSoundEnabled, loadUnread, loadParticipants]);
+  }, [token, user, isAdmin, settings?.chatSoundEnabled, loadUnread]);
 
   if (!user || !settings?.chatEnabled) return null;
 
-  const selected = isAdmin ? participants.find((p) => p.id === selectedId) : null;
-  const threadId = isAdmin ? selectedId : user.id;
-  const title = isAdmin
-    ? selected
-      ? `${selected.fullName} · ${roleLabel(selected.role)}`
-      : 'Seleccione un usuario'
-    : 'Chat con administración';
-  const sortedParticipants = [...participants].sort((a, b) => {
-    if (!!a.online === !!b.online) return a.fullName.localeCompare(b.fullName, 'es');
-    return a.online ? -1 : 1;
-  });
+  // Administrador: solo badge + sonido; abre el apartado dedicado
+  if (isAdmin) {
+    return (
+      <button
+        type="button"
+        title="Ir a Chat interno"
+        onClick={() => {
+          unlockChatSound();
+          window.dispatchEvent(new CustomEvent('admin:open-chat'));
+          if (!window.location.pathname.startsWith('/admin')) {
+            window.location.assign('/admin?tab=chat');
+          }
+        }}
+        className={`relative text-sm px-3 py-1.5 rounded-lg font-medium transition ${
+          unread > 0 || flash
+            ? 'bg-amber-400 text-amber-950 hover:bg-amber-300 ring-2 ring-amber-200'
+            : 'bg-slate-700 hover:bg-slate-600 text-white'
+        }`}
+      >
+        Chat
+        {unread > 0 && (
+          <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-red-600 text-white text-xs font-bold">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
+      </button>
+    );
+  }
 
+  // Usuarios (ventanilla, filtro, etc.): popup + auto-abrir
   return (
     <div className="relative">
       <button
@@ -569,10 +568,7 @@ export function ChatNavButton() {
         onClick={() => {
           unlockChatSound();
           setOpen((v) => !v);
-          if (!openRef.current) {
-            loadUnread();
-            loadParticipants();
-          }
+          if (!openRef.current) loadUnread();
         }}
         className={`relative text-sm px-3 py-1.5 rounded-lg font-medium transition ${
           unread > 0 || flash
@@ -591,52 +587,20 @@ export function ChatNavButton() {
       {open && (
         <div className="fixed right-3 top-16 sm:right-6 w-[min(100vw-1.5rem,26rem)] bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200 p-4 z-[200]">
           <div className="flex justify-between items-center mb-2">
-            <p className="font-semibold text-sm">Chat interno</p>
+            <p className="font-semibold text-sm">Chat con administración</p>
             <button type="button" className="text-slate-400 hover:text-slate-700 text-sm" onClick={() => setOpen(false)}>
               Cerrar
             </button>
           </div>
-
-          {isAdmin && (
-            <div className="mb-3 max-h-36 overflow-y-auto space-y-1 border-b border-slate-100 pb-2">
-              <p className="text-[10px] text-slate-400 px-1 mb-1">● En línea / ○ Fuera</p>
-              {sortedParticipants.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelectedId(p.id)}
-                  className={`w-full text-left text-xs px-2 py-1.5 rounded flex justify-between items-center gap-2 ${
-                    selectedId === p.id ? 'bg-blue-50 text-blue-900' : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <span className="truncate flex items-center gap-1.5 min-w-0">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${p.online ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                    <span className="truncate">
-                      {p.fullName} · {roleLabel(p.role)}
-                    </span>
-                  </span>
-                  {p.unread > 0 && (
-                    <span className="font-bold text-amber-700 ml-2 shrink-0">{p.unread}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {threadId && settings ? (
+          {settings && (
             <ChatConversation
-              participantId={threadId}
-              title={title}
+              participantId={user.id}
+              title="Chat con administración"
               settings={settings}
-              onUnreadChange={() => {
-                loadUnread();
-                loadParticipants();
-              }}
+              onUnreadChange={loadUnread}
               compact
               muteIncomingSound
             />
-          ) : (
-            <p className="text-sm text-slate-500 py-8 text-center">Seleccione un usuario</p>
           )}
         </div>
       )}
