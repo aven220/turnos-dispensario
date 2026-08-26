@@ -129,6 +129,7 @@ export async function getDispensationsForDay(datePrefix: string) {
       priority: true,
       window: true,
       createdBy: { select: { fullName: true } },
+      client: { select: { fullName: true, documentNumber: true } },
     },
     orderBy: [{ finishedAt: 'asc' }, { createdAt: 'asc' }],
   });
@@ -148,6 +149,8 @@ export async function getDispensationsForDay(datePrefix: string) {
       priorityCode: t.priority.code,
       windowName: t.window?.name ?? null,
       windowNumber: t.window?.number ?? null,
+      clientName: t.client?.fullName ?? null,
+      clientDocument: t.client?.documentNumber ?? null,
       createdAt: t.createdAt,
       calledAt: t.calledAt,
       attendingAt: t.attendingAt,

@@ -47,6 +47,7 @@ services:
       HOST: 0.0.0.0
       CORS_ORIGIN: '*'
       NODE_ENV: production
+      TZ: America/Bogota
       PUBLIC_SERVER_IP: ${PUBLIC_SERVER_IP:-192.168.20.26}
       SEED_ON_START: ${SEED_ON_START:-false}
     ports:

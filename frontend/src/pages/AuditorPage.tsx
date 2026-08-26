@@ -12,13 +12,28 @@ function formatTodayLabel(prefix?: string): string {
   return `${prefix.slice(6, 8)}/${prefix.slice(4, 6)}/${prefix.slice(0, 4)}`;
 }
 
+function toInputDate(prefix?: string) {
+  if (!prefix || prefix.length !== 8) return '';
+  return `${prefix.slice(0, 4)}-${prefix.slice(4, 6)}-${prefix.slice(6, 8)}`;
+}
+
 export function AuditorPage() {
   const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [tab, setTab] = useState<'stats' | 'history' | 'monitor'>('stats');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  function statsQuery() {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const q = params.toString();
+    return q ? `?${q}` : '';
+  }
 
   async function loadStats() {
-    const s = await api<Stats>('/stats');
+    const s = await api<Stats>(`/stats${statsQuery()}`);
     setStats(s);
   }
 
@@ -29,7 +44,7 @@ export function AuditorPage() {
   }, [token]);
 
   async function download(kind: 'excel' | 'pdf') {
-    const blob = await apiBlob(`/stats/export/${kind}`);
+    const blob = await apiBlob(`/stats/export/${kind}${statsQuery()}`);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -70,9 +85,44 @@ export function AuditorPage() {
 
       {tab === 'stats' && stats && (
         <div className="space-y-6">
+          <Card>
+            <h3 className="font-semibold mb-3">Rango de fechas</h3>
+            <div className="flex flex-wrap gap-3 items-end">
+              <label className="text-sm">
+                Fecha inicial
+                <input
+                  type="date"
+                  className="block border rounded-lg px-3 py-2 mt-1"
+                  value={from || toInputDate(stats.datePrefix ?? stats.fromPrefix)}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </label>
+              <label className="text-sm">
+                Fecha final
+                <input
+                  type="date"
+                  className="block border rounded-lg px-3 py-2 mt-1"
+                  value={to || toInputDate(stats.datePrefix ?? stats.toPrefix)}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={loadStats}
+                className="text-sm px-3 py-2 rounded-lg bg-blue-600 text-white"
+              >
+                Generar reporte
+              </button>
+            </div>
+          </Card>
+
           <Card className="bg-slate-50">
             <p className="text-sm text-slate-600">
-              Vista de solo lectura — tiempos de espera, respuesta y atención por ventanilla ({formatTodayLabel(stats.datePrefix)}).
+              Vista de solo lectura — tiempos de espera, respuesta y atención por ventanilla (
+              {stats.fromPrefix && stats.toPrefix && stats.fromPrefix !== stats.toPrefix
+                ? `${formatTodayLabel(stats.fromPrefix)} → ${formatTodayLabel(stats.toPrefix)}`
+                : formatTodayLabel(stats.datePrefix ?? stats.fromPrefix)}
+              ).
             </p>
           </Card>
 
@@ -119,8 +169,7 @@ export function AuditorPage() {
                     <th className="py-2 pr-2">Espera prom.</th>
                     <th className="py-2 pr-2">Respuesta prom.</th>
                     <th className="py-2 pr-2">Atención prom.</th>
-                    <th className="py-2 pr-2">Operador</th>
-                    <th className="py-2">Estado</th>
+                    <th className="py-2">Operador</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -131,40 +180,17 @@ export function AuditorPage() {
                       <td className="py-2 pr-2">{formatDuration(w.avgWaitSeconds ?? 0)}</td>
                       <td className="py-2 pr-2">{formatDuration(w.avgResponseSeconds ?? 0)}</td>
                       <td className="py-2 pr-2">{formatDuration(w.avgAttentionSeconds)}</td>
-                      <td className="py-2 pr-2">{w.assignedUser ?? '—'}</td>
-                      <td className="py-2">
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full ${
-                            w.attentionStatus === 'ACTIVE'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : w.attentionStatus === 'PAUSED'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {w.attentionStatus === 'ACTIVE'
-                            ? 'Activo'
-                            : w.attentionStatus === 'PAUSED'
-                              ? 'Pausa'
-                              : 'Sin sesión'}
-                        </span>
-                      </td>
+                      <td className="py-2">{w.assignedUser ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-500 mt-4">
-              <strong>Espera:</strong> desde generación del turno hasta llamado.{' '}
-              <strong>Respuesta:</strong> desde llamado hasta inicio de atención.{' '}
-              <strong>Atención:</strong> duración del servicio.
-            </p>
           </Card>
         </div>
       )}
 
-      {tab === 'history' && <DailyHistoryPanel title="Historial de dispensas por día" />}
-
+      {tab === 'history' && <DailyHistoryPanel title="Historial de dispensas" />}
       {tab === 'monitor' && <AuditMonitor />}
     </Layout>
   );

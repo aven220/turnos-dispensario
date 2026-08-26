@@ -13,17 +13,43 @@ router.use(authMiddleware);
 
 function emitTicketUpdate(event: string, ticket: unknown) {
   const io = getIO();
-  io.emit(event, ticket);
-  io.to('tv').emit(event, ticket);
-  io.to('admin').emit(event, ticket);
+  // TV no recibe datos personales del cliente
+  let publicTicket = ticket;
+  if (ticket && typeof ticket === 'object' && ticket !== null && 'client' in ticket) {
+    const { client: _client, ...rest } = ticket as Record<string, unknown>;
+    publicTicket = rest;
+  }
+  io.except('tv').emit(event, ticket);
+  io.to('tv').emit(event, publicTicket);
 }
 
 router.post('/generate', requireRoles(UserRole.FILTER, UserRole.ADMIN), async (req, res, next) => {
   try {
-    const { priorityId } = z.object({ priorityId: z.string() }).parse(req.body);
-    const ticket = await ticketService.createTicket(priorityId, req.user!.sub, getClientIp(req));
+    const { priorityId, clientId } = z
+      .object({ priorityId: z.string(), clientId: z.string().min(1) })
+      .parse(req.body);
+    const ticket = await ticketService.createTicket(priorityId, req.user!.sub, getClientIp(req), clientId);
     emitTicketUpdate('ticket:created', ticket);
     res.status(201).json(ticket);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/numbering', requireRoles(UserRole.ADMIN), async (_req, res, next) => {
+  try {
+    res.json(await ticketService.getNumberingForToday());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/numbering/:priorityId', requireRoles(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const priorityId = paramId(req, 'priorityId');
+    const { nextNumber } = z.object({ nextNumber: z.coerce.number().int().min(1) }).parse(req.body);
+    const result = await ticketService.setNextNumber(priorityId, nextNumber, req.user!.sub, getClientIp(req));
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -144,6 +170,20 @@ router.post('/:id/absent', requireRoles(UserRole.WINDOW), async (req, res, next)
     await windowMessageService.assertNoPendingMessage(windowId);
     const ticket = await ticketService.markAbsent(paramId(req), windowId, req.user!.sub, getClientIp(req));
     emitTicketUpdate('ticket:absent', ticket);
+    res.json(ticket);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/cancel', requireRoles(UserRole.ADMIN), async (req, res, next) => {
+  try {
+    const { reason } = z
+      .object({ reason: z.string().max(200).optional() })
+      .parse(req.body ?? {});
+    const ticket = await ticketService.cancelTicket(paramId(req), req.user!.sub, reason, getClientIp(req));
+    emitTicketUpdate('ticket:cancelled', ticket);
+    emitTicketUpdate('ticket:finished', ticket);
     res.json(ticket);
   } catch (err) {
     next(err);

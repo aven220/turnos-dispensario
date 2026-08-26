@@ -8,6 +8,8 @@ import { WindowsManager } from '../components/WindowsManager';
 import { PriorityQueueSummary } from '../components/PriorityQueueSummary';
 import { WindowMessagesPanel } from '../components/WindowMessagesPanel';
 import { AdminChatPanel } from '../components/InternalChat';
+import { ClientsAdminPanel } from '../components/ClientsAdminPanel';
+import { NumberingPanel } from '../components/NumberingPanel';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { api, apiBlob, apiUpload } from '../services/api';
@@ -16,7 +18,7 @@ import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
 import { formatDuration } from '../utils/formatDuration';
 
-type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'chat' | 'tv' | 'ticketPrint' | 'audit';
+type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'clients' | 'chat' | 'tv' | 'ticketPrint' | 'audit';
 
 const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   id: 'default',
@@ -71,10 +73,25 @@ export function AdminPage() {
   const [ticketPrintSettings, setTicketPrintSettings] = useState<TicketPrintSettings | null>(null);
   const [ticketPrintDraft, setTicketPrintDraft] = useState<TicketPrintSettings>(DEFAULT_TICKET_PRINT);
   const [ticketPrintError, setTicketPrintError] = useState('');
+  const [statsFrom, setStatsFrom] = useState('');
+  const [statsTo, setStatsTo] = useState('');
+
+  function toInputDate(prefix?: string) {
+    if (!prefix || prefix.length !== 8) return '';
+    return `${prefix.slice(0, 4)}-${prefix.slice(4, 6)}-${prefix.slice(6, 8)}`;
+  }
+
+  function statsQuery() {
+    const params = new URLSearchParams();
+    if (statsFrom) params.set('from', statsFrom);
+    if (statsTo) params.set('to', statsTo);
+    const q = params.toString();
+    return q ? `?${q}` : '';
+  }
 
   async function loadAll() {
     const [s, u, w, p] = await Promise.all([
-      api<Stats>('/stats'),
+      api<Stats>(`/stats${statsQuery()}`),
       api<User[]>('/users'),
       api<Window[]>('/windows'),
       api<Priority[]>('/priorities?includeInactive=true'),
@@ -83,6 +100,11 @@ export function AdminPage() {
     setUsers(u);
     setWindows(w);
     setPriorities(p);
+  }
+
+  async function loadStatsRange() {
+    const s = await api<Stats>(`/stats${statsQuery()}`);
+    setStats(s);
   }
 
   async function loadTvConfig() {
@@ -472,7 +494,7 @@ export function AdminPage() {
   }
 
   async function download(format: 'excel' | 'pdf') {
-    const blob = await apiBlob(`/stats/export/${format}`);
+    const blob = await apiBlob(`/stats/export/${format}${statsQuery()}`);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -503,6 +525,7 @@ export function AdminPage() {
     { id: 'users', label: 'Usuarios' },
     { id: 'windows', label: 'Ventanillas' },
     { id: 'priorities', label: 'Prioridades' },
+    { id: 'clients', label: 'Clientes' },
     { id: 'chat', label: 'Chat interno' },
     { id: 'tv', label: 'Pantalla TV' },
     { id: 'ticketPrint', label: 'Impresión turno' },
@@ -550,20 +573,65 @@ export function AdminPage() {
 
       {tab === 'dashboard' && stats && (
         <div className="space-y-6">
+          <Card>
+            <h3 className="font-semibold mb-3">Rango de fechas (America/Bogota)</h3>
+            <div className="flex flex-wrap gap-3 items-end">
+              <label className="text-sm">
+                Fecha inicial
+                <input
+                  type="date"
+                  className="block border rounded-lg px-3 py-2 mt-1"
+                  value={statsFrom || toInputDate(stats.datePrefix ?? stats.fromPrefix)}
+                  onChange={(e) => setStatsFrom(e.target.value)}
+                />
+              </label>
+              <label className="text-sm">
+                Fecha final
+                <input
+                  type="date"
+                  className="block border rounded-lg px-3 py-2 mt-1"
+                  value={statsTo || toInputDate(stats.datePrefix ?? stats.toPrefix)}
+                  onChange={(e) => setStatsTo(e.target.value)}
+                />
+              </label>
+              <Button onClick={() => loadStatsRange()}>Generar reporte</Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setStatsFrom('');
+                  setStatsTo('');
+                  api<Stats>('/stats').then(setStats);
+                }}
+              >
+                Hoy
+              </Button>
+              <Button variant="secondary" onClick={() => download('excel')}>
+                Exportar Excel
+              </Button>
+              <Button variant="secondary" onClick={() => download('pdf')}>
+                Exportar PDF
+              </Button>
+            </div>
+          </Card>
+
           <Card className="bg-blue-50 border-blue-200">
             <div className="flex flex-wrap justify-between items-start gap-4">
               <div>
-                <h3 className="font-semibold text-blue-900">Informe detallado del día</h3>
+                <h3 className="font-semibold text-blue-900">Informe detallado</h3>
                 <p className="text-sm text-blue-700 mt-1">
-                  Estadísticas y detalle por ventanilla — {formatTodayLabel(stats.datePrefix)}
+                  {stats.fromPrefix && stats.toPrefix && stats.fromPrefix !== stats.toPrefix
+                    ? `${formatTodayLabel(stats.fromPrefix)} → ${formatTodayLabel(stats.toPrefix)}`
+                    : `Estadísticas — ${formatTodayLabel(stats.datePrefix ?? stats.fromPrefix)}`}
                 </p>
                 <p className="text-xs text-blue-600 mt-2">
                   Los turnos reinician cada día. La numeración (PRI001, GEN001…) vuelve a cero automáticamente.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => downloadDaily('daily-excel')}>Excel detallado</Button>
-                <Button variant="secondary" onClick={() => downloadDaily('daily-pdf')}>PDF detallado</Button>
+                <Button onClick={() => downloadDaily('daily-excel')}>Excel detallado (día)</Button>
+                <Button variant="secondary" onClick={() => downloadDaily('daily-pdf')}>
+                  PDF detallado (día)
+                </Button>
               </div>
             </div>
           </Card>
@@ -731,6 +799,7 @@ export function AdminPage() {
       )}
 
       {tab === 'priorities' && (
+        <>
         <div className="grid lg:grid-cols-2 gap-6">
           <Card>
             {editingPriority ? (
@@ -862,7 +931,11 @@ export function AdminPage() {
             </div>
           </Card>
         </div>
+        <NumberingPanel />
+        </>
       )}
+
+      {tab === 'clients' && <ClientsAdminPanel />}
 
       {tab === 'chat' && <AdminChatPanel />}
 

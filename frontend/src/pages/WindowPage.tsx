@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AttentionReminder } from '../components/AttentionReminder';
 import { Button, Card, Layout } from '../components/Layout';
 import { WindowMessageModal, type PendingWindowMessage } from '../components/WindowMessageModal';
@@ -6,9 +6,12 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket } from '../types';
+import { playAttentionReminderBeep, unlockAttentionSound } from '../utils/attentionSound';
 import { repeatCallCooldownRemaining } from '../utils/callCooldown';
+import { formatBogotaTime } from '../utils/datetime';
 
 const ATTENTION_REMINDER_MS = 5 * 60 * 1000;
+const ATTENDING_BEEP_MS = 5 * 60 * 1000;
 
 interface WindowState {
   activeTicket: Ticket | null;
@@ -58,6 +61,31 @@ export function WindowPage() {
     }
   }, [ticket?.id, ticket?.status]);
 
+  // Recordatorio sonoro cada 5 min mientras ATENDIENDO
+  const lastBeepSlotRef = useRef<number>(-1);
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'ATENDIENDO' || !ticket.attendingAt) {
+      lastBeepSlotRef.current = -1;
+      return;
+    }
+    unlockAttentionSound();
+    const startedAt = new Date(ticket.attendingAt).getTime();
+
+    const tick = () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < ATTENDING_BEEP_MS) return;
+      const slot = Math.floor(elapsed / ATTENDING_BEEP_MS);
+      if (slot > 0 && slot !== lastBeepSlotRef.current) {
+        lastBeepSlotRef.current = slot;
+        playAttentionReminderBeep();
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 5_000);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.status, ticket?.attendingAt]);
+
   useEffect(() => {
     if (!ticket || ticket.status !== 'LLAMADO') {
       setRepeatCooldownSec(0);
@@ -105,6 +133,7 @@ export function WindowPage() {
     socket.on('ticket:attending', refresh);
     socket.on('ticket:finished', refresh);
     socket.on('ticket:absent', refresh);
+    socket.on('ticket:cancelled', refresh);
     socket.on('tv:settings-updated', refresh);
     socket.on('window:availability-changed', refresh);
     socket.on('window:message', onMessage);
@@ -116,6 +145,7 @@ export function WindowPage() {
       socket.off('ticket:attending', refresh);
       socket.off('ticket:finished', refresh);
       socket.off('ticket:absent', refresh);
+      socket.off('ticket:cancelled', refresh);
       socket.off('tv:settings-updated', refresh);
       socket.off('window:availability-changed', refresh);
       socket.off('window:message', onMessage);
@@ -329,7 +359,7 @@ export function WindowPage() {
                   {isAvailable ? 'Activo' : 'En pausa'}
                 </dd>
               </div>
-              <div><dt className="text-slate-500">Inicio sesión</dt><dd>{state?.session ? new Date(state.session.startedAt).toLocaleTimeString('es-CO') : '—'}</dd></div>
+              <div><dt className="text-slate-500">Inicio sesión</dt><dd>{state?.session ? formatBogotaTime(state.session.startedAt) : '—'}</dd></div>
               <div><dt className="text-slate-500">Turnos atendidos hoy</dt><dd className="text-2xl font-bold text-emerald-600">{state?.todayServed ?? 0}</dd></div>
             </dl>
           </Card>

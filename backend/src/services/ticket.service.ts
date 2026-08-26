@@ -1,6 +1,6 @@
 import { Prisma, TicketStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
-import { datePrefixToLabel, formatDisplayCode, formatUniqueCode, parseDatePrefix, todayPrefix } from '../utils/date.js';
+import { datePrefixRange, datePrefixToLabel, formatDisplayCode, formatUniqueCode, parseDatePrefix, todayPrefix } from '../utils/date.js';
 import { orderedWindowPriorityIds, sortTicketsByWindowPriority, windowPriorityInclude } from '../utils/window-priority-order.js';
 import { assertRepeatCallCooldown } from '../utils/call-cooldown.js';
 import { ensureDailyOperations } from './daily-reset.service.js';
@@ -25,9 +25,24 @@ export class TicketService {
     return session;
   }
 
-  async createTicket(priorityId: string, createdById: string, ipAddress?: string) {
+  async createTicket(priorityId: string, createdById: string, ipAddress?: string, clientId?: string) {
     await ensureDailyOperations();
     const datePrefix = todayPrefix();
+
+    if (!clientId) {
+      const err = new Error('Debe seleccionar o registrar un cliente antes de generar el turno') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (!client) {
+      const err = new Error('Cliente no encontrado') as Error & { statusCode?: number };
+      err.statusCode = 404;
+      throw err;
+    }
 
     const ticket = await prisma.$transaction(async (tx) => {
       const priority = await tx.priority.findUniqueOrThrow({ where: { id: priorityId } });
@@ -48,18 +63,23 @@ export class TicketService {
           displayCode,
           priorityId,
           createdById,
+          clientId,
           sequenceNum,
           datePrefix,
           status: TicketStatus.GENERADO,
         },
-        include: { priority: true, createdBy: { select: { id: true, fullName: true } } },
+        include: {
+          priority: true,
+          createdBy: { select: { id: true, fullName: true } },
+          client: { select: { id: true, fullName: true, documentNumber: true } },
+        },
       });
     });
 
     await logAudit({
       userId: createdById,
       action: 'TURNO_GENERADO',
-      details: ticket.displayCode,
+      details: `${ticket.displayCode} · ${client.fullName} (${client.documentNumber})`,
       ticketId: ticket.id,
       ipAddress,
     });
@@ -305,6 +325,51 @@ export class TicketService {
     return updated;
   }
 
+  async cancelTicket(
+    ticketId: string,
+    userId: string,
+    reason?: string,
+    ipAddress?: string
+  ) {
+    const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId } });
+    const cancellable: TicketStatus[] = [
+      TicketStatus.GENERADO,
+      TicketStatus.LLAMADO,
+      TicketStatus.ATENDIENDO,
+    ];
+    if (!cancellable.includes(ticket.status)) {
+      const err = new Error(
+        'Solo se pueden cancelar turnos en GENERADO, LLAMADO o ATENDIENDO'
+      ) as Error & { statusCode?: number };
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const updated = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { status: TicketStatus.CANCELADO, finishedAt: new Date() },
+      include: {
+        priority: true,
+        window: true,
+        client: { select: { id: true, fullName: true, documentNumber: true } },
+        createdBy: { select: { fullName: true } },
+      },
+    });
+
+    const reasonLabel = reason?.trim() || 'Sin motivo';
+    await logAudit({
+      userId,
+      action: 'TURNO_CANCELADO',
+      details: `${updated.displayCode} · ${reasonLabel}`,
+      windowId: updated.windowId ?? undefined,
+      ticketId,
+      ipAddress,
+    });
+
+    await syncDailyHistoryForDate(updated.datePrefix);
+    return updated;
+  }
+
   async getTodayTickets(filters?: { status?: TicketStatus; priorityId?: string }) {
     const datePrefix = todayPrefix();
     return prisma.ticket.findMany({
@@ -317,6 +382,7 @@ export class TicketService {
         priority: true,
         window: true,
         createdBy: { select: { fullName: true } },
+        client: { select: { id: true, fullName: true, documentNumber: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -330,6 +396,7 @@ export class TicketService {
       priority: true,
       window: true,
       createdBy: { select: { fullName: true } },
+      client: { select: { id: true, fullName: true, documentNumber: true } },
     } as const;
 
     const activeInclude = {
@@ -617,18 +684,15 @@ export class TicketService {
     return updated;
   }
 
-  async getStats(dateFrom?: Date, dateTo?: Date) {
+  async getStats(dateFromPrefix?: string, dateToPrefix?: string) {
     await ensureDailyOperations();
 
-    const useDateRange = !!(dateFrom || dateTo);
-    const where: Prisma.TicketWhereInput = useDateRange
-      ? {
-          createdAt: {
-            ...(dateFrom && { gte: dateFrom }),
-            ...(dateTo && { lte: dateTo }),
-          },
-        }
-      : { datePrefix: todayPrefix() };
+    const useDateRange = !!(dateFromPrefix || dateToPrefix);
+    const prefixes = useDateRange
+      ? datePrefixRange(dateFromPrefix, dateToPrefix ?? dateFromPrefix)
+      : [todayPrefix()];
+
+    const where: Prisma.TicketWhereInput = { datePrefix: { in: prefixes } };
 
     const [generated, attended, absent, cancelled] = await Promise.all([
       prisma.ticket.count({ where: { ...where, status: { not: TicketStatus.CANCELADO } } }),
@@ -636,15 +700,6 @@ export class TicketService {
       prisma.ticket.count({ where: { ...where, status: TicketStatus.AUSENTE } }),
       prisma.ticket.count({ where: { ...where, status: TicketStatus.CANCELADO } }),
     ]);
-
-    const ticketWindowFilter: Prisma.TicketWhereInput = useDateRange
-      ? {
-          createdAt: {
-            ...(dateFrom && { gte: dateFrom }),
-            ...(dateTo && { lte: dateTo }),
-          },
-        }
-      : { datePrefix: todayPrefix() };
 
     const windows = await prisma.window.findMany({
       where: { isActive: true },
@@ -656,7 +711,7 @@ export class TicketService {
           orderBy: { startedAt: 'desc' },
         },
         tickets: {
-          where: ticketWindowFilter,
+          where,
           select: { status: true, attendingAt: true, finishedAt: true, calledAt: true, createdAt: true },
         },
       },
@@ -714,7 +769,114 @@ export class TicketService {
 
     windowStats.sort((a, b) => b.totalAttended - a.totalAttended);
 
-    return { generated, attended, absent, cancelled, windowStats, datePrefix: useDateRange ? undefined : todayPrefix() };
+    return {
+      generated,
+      attended,
+      absent,
+      cancelled,
+      windowStats,
+      datePrefix: useDateRange ? undefined : todayPrefix(),
+      fromPrefix: prefixes[0],
+      toPrefix: prefixes[prefixes.length - 1],
+    };
+  }
+
+  async getNumberingForToday() {
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+    const priorities = await prisma.priority.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    const counters = await prisma.dailyCounter.findMany({ where: { datePrefix } });
+    const counterMap = new Map(counters.map((c) => [c.priorityId, c.lastNumber]));
+
+    const maxRows = await prisma.ticket.groupBy({
+      by: ['priorityId'],
+      where: { datePrefix },
+      _max: { sequenceNum: true },
+    });
+    const maxMap = new Map(maxRows.map((r) => [r.priorityId, r._max.sequenceNum ?? 0]));
+
+    return {
+      datePrefix,
+      items: priorities.map((p) => {
+        const maxIssued = maxMap.get(p.id) ?? 0;
+        const lastNumber = Math.max(counterMap.get(p.id) ?? 0, maxIssued);
+        return {
+          priorityId: p.id,
+          name: p.name,
+          code: p.code,
+          lastNumber,
+          maxIssued,
+          nextNumber: lastNumber + 1,
+        };
+      }),
+    };
+  }
+
+  async setNextNumber(priorityId: string, nextNumber: number, userId: string, ipAddress?: string) {
+    await ensureDailyOperations();
+    const datePrefix = todayPrefix();
+
+    if (!Number.isInteger(nextNumber) || nextNumber < 1) {
+      const err = new Error('El próximo número debe ser un entero mayor o igual a 1') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const priority = await prisma.priority.findUniqueOrThrow({ where: { id: priorityId } });
+
+    const existing = await prisma.ticket.findFirst({
+      where: { datePrefix, priorityId, sequenceNum: nextNumber },
+    });
+    if (existing) {
+      const err = new Error('Este número de turno ya existe. Seleccione otro número.') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const maxRow = await prisma.ticket.aggregate({
+      where: { datePrefix, priorityId },
+      _max: { sequenceNum: true },
+    });
+    const maxIssued = maxRow._max.sequenceNum ?? 0;
+    if (nextNumber <= maxIssued) {
+      const err = new Error('Este número de turno ya existe. Seleccione otro número.') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // lastNumber = nextNumber - 1 para que el siguiente increment genere nextNumber
+    const lastNumber = nextNumber - 1;
+    await prisma.dailyCounter.upsert({
+      where: { datePrefix_priorityId: { datePrefix, priorityId } },
+      create: { datePrefix, priorityId, lastNumber },
+      update: { lastNumber },
+    });
+
+    await logAudit({
+      userId,
+      action: 'NUMERACION_ACTUALIZADA',
+      details: `${priority.code} próximo=${formatDisplayCode(priority.code, nextNumber)}`,
+      ipAddress,
+    });
+
+    return {
+      priorityId,
+      code: priority.code,
+      datePrefix,
+      nextNumber,
+      preview: formatDisplayCode(priority.code, nextNumber),
+      uniquePreview: formatUniqueCode(datePrefix, priority.code, nextNumber),
+    };
   }
 
   async getDailyReport(dateInput?: string) {

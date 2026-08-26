@@ -18,13 +18,17 @@ function escapeHtml(value: string) {
     .replace(/"/g, '&quot;');
 }
 
+import { APP_TIMEZONE } from './datetime';
+
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('es-CO', {
+    timeZone: APP_TIMEZONE,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
 }
 
@@ -135,7 +139,13 @@ export function buildTicketPrintHtml(
   <div class="ticket">
     ${blocks.join('\n    ')}
   </div>
-  ${autoPrint ? '<script>window.onload = () => { window.print(); };</script>' : ''}
+  ${autoPrint ? `<script>
+    window.onload = () => {
+      window.print();
+      window.onafterprint = () => { setTimeout(() => window.close(), 200); };
+      setTimeout(() => { try { window.close(); } catch (e) {} }, 60000);
+    };
+  </script>` : ''}
 </body>
 </html>`;
 }
@@ -149,4 +159,17 @@ export function openTicketPrint(ticket: Ticket, settings: TicketPrintSettings) {
   printWindow.document.write(buildTicketPrintHtml(ticket, settings, { autoPrint: true }));
   printWindow.document.close();
   printWindow.focus();
+
+  // Cerrar tras imprimir (o tras timeout si el navegador no dispara afterprint)
+  const closePrintWindow = () => {
+    try {
+      if (!printWindow.closed) printWindow.close();
+    } catch {
+      // ignore
+    }
+  };
+  printWindow.onafterprint = () => {
+    setTimeout(closePrintWindow, 200);
+  };
+  setTimeout(closePrintWindow, 60_000);
 }

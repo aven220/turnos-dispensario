@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, apiBlob } from '../services/api';
 import type { DailyHistoryDay, DayDispensations } from '../types';
+import { formatBogotaDateTime } from '../utils/datetime';
 import { formatDuration } from '../utils/formatDuration';
 import { Button, Card } from './Layout';
 
@@ -118,7 +119,7 @@ export function DailyHistoryPanel({ title = 'Historial de dispensas por día' }:
                     {formatDayLabel(selectedDay.dateLabel, selectedDay.isToday)}
                   </h4>
                   <p className="text-sm text-slate-500 mt-1">
-                    Guardado: {new Date(selectedDay.archivedAt).toLocaleString('es-CO')}
+                    Guardado: {formatBogotaDateTime(selectedDay.archivedAt)}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -183,6 +184,7 @@ export function DailyHistoryPanel({ title = 'Historial de dispensas por día' }:
                   <thead className="sticky top-0 bg-white">
                     <tr className="border-b text-left text-slate-500">
                       <th className="py-2 pr-2">Turno</th>
+                      <th className="py-2 pr-2">Cliente</th>
                       <th className="py-2 pr-2">Prioridad</th>
                       <th className="py-2 pr-2">Ventanilla</th>
                       <th className="py-2 pr-2">Estado</th>
@@ -194,6 +196,16 @@ export function DailyHistoryPanel({ title = 'Historial de dispensas por día' }:
                     {detail.dispensations.map((d) => (
                       <tr key={d.id} className="border-b">
                         <td className="py-2 pr-2 font-bold text-blue-900">{d.displayCode}</td>
+                        <td className="py-2 pr-2 text-xs">
+                          {d.clientName ? (
+                            <>
+                              {d.clientName}
+                              <span className="block text-slate-400">{d.clientDocument}</span>
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="py-2 pr-2">{d.priority}</td>
                         <td className="py-2 pr-2">{d.windowName ?? '—'}</td>
                         <td className="py-2 pr-2">

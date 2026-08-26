@@ -15,6 +15,7 @@ import tvRoutes from './routes/tv.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import windowsRoutes from './routes/windows.routes.js';
 import chatRoutes from './routes/chat.routes.js';
+import clientsRoutes from './routes/clients.routes.js';
 import { ensureDailyOperations } from './services/daily-reset.service.js';
 import { setupSocketIO } from './sockets/index.js';
 
@@ -44,6 +45,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/windows', windowsRoutes);
 app.use('/api/priorities', prioritiesRoutes);
 app.use('/api/tickets', ticketsRoutes);
+app.use('/api/clients', clientsRoutes);
 app.use('/api/tv', tvRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/chat', chatRoutes);

@@ -13,6 +13,7 @@ import {
   unlockSpeech,
 } from '../utils/speech';
 import { isYoutubeUrl, youtubeEmbedUrl } from '../utils/media';
+import { formatBogotaClock, formatBogotaDate } from '../utils/datetime';
 import { removePendingCall, sortPendingCalls, upsertPendingCall } from '../utils/tvCalls';
 import { tvScaledFontSize } from '../utils/tvTypography';
 
@@ -323,10 +324,10 @@ export function TvPage() {
           </div>
           <div className="shrink-0 border-t border-slate-700 bg-slate-900/90 px-4 py-2 sm:py-3 text-center">
             <p className="font-semibold text-white tabular-nums text-[clamp(1.25rem,4vw,2rem)] tracking-wide">
-              {now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {formatBogotaClock(now)}
             </p>
             <p className="text-slate-400 capitalize text-[clamp(0.7rem,2vw,0.875rem)]">
-              {now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {formatBogotaDate(now)}
             </p>
           </div>
         </section>

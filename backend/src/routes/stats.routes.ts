@@ -10,10 +10,10 @@ import { STATS_ROLES } from '../utils/roles.js';
 const router = Router();
 router.use(authMiddleware, requireRoles(...STATS_ROLES));
 
-function parseDates(req: { query: Record<string, unknown> }) {
-  const dateFrom = req.query.from ? new Date(req.query.from as string) : undefined;
-  const dateTo = req.query.to ? new Date(req.query.to as string) : undefined;
-  return { dateFrom, dateTo };
+function parsePrefixRange(req: { query: Record<string, unknown> }) {
+  const from = req.query.from ? parseDatePrefix(String(req.query.from)) : undefined;
+  const to = req.query.to ? parseDatePrefix(String(req.query.to)) : undefined;
+  return { from, to };
 }
 
 function filenameDate(req: { query: Record<string, unknown> }) {
@@ -21,8 +21,8 @@ function filenameDate(req: { query: Record<string, unknown> }) {
 }
 
 router.get('/', async (req, res) => {
-  const { dateFrom, dateTo } = parseDates(req);
-  const stats = await ticketService.getStats(dateFrom, dateTo);
+  const { from, to } = parsePrefixRange(req);
+  const stats = await ticketService.getStats(from, to);
   res.json(stats);
 });
 
@@ -47,8 +47,8 @@ router.get('/monitor', async (_req, res) => {
 
 router.get('/export/excel', async (req, res, next) => {
   try {
-    const { dateFrom, dateTo } = parseDates(req);
-    const buffer = await exportService.generateExcel(dateFrom, dateTo);
+    const { from, to } = parsePrefixRange(req);
+    const buffer = await exportService.generateExcel(from, to);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=reporte-turnos.xlsx');
     res.send(buffer);
@@ -59,8 +59,8 @@ router.get('/export/excel', async (req, res, next) => {
 
 router.get('/export/pdf', async (req, res, next) => {
   try {
-    const { dateFrom, dateTo } = parseDates(req);
-    const buffer = await exportService.generatePdf(dateFrom, dateTo);
+    const { from, to } = parsePrefixRange(req);
+    const buffer = await exportService.generatePdf(from, to);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=reporte-turnos.pdf');
     res.send(buffer);

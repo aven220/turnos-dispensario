@@ -6,14 +6,10 @@ import type { ChatMessage, ChatParticipant, ChatSettings, ChatThread } from '../
 import { playChatNotifySound, unlockChatSound } from '../utils/chatSound';
 import { Button, Card } from './Layout';
 
+import { formatBogotaDateTime } from '../utils/datetime';
+
 function formatMsgTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString('es-CO', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatBogotaDateTime(iso);
 }
 
 function roleLabel(role: string): string {

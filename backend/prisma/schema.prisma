@@ -149,6 +149,7 @@ model Ticket {
   priorityId    String       @map("priority_id")
   windowId      String?      @map("window_id")
   createdById   String       @map("created_by_id")
+  clientId      String?      @map("client_id")
   callCount     Int          @default(0) @map("call_count")
   sequenceNum   Int          @map("sequence_num")
   datePrefix    String       @map("date_prefix")
@@ -162,12 +163,27 @@ model Ticket {
   priority  Priority @relation(fields: [priorityId], references: [id])
   window    Window?  @relation(fields: [windowId], references: [id])
   createdBy User     @relation("TicketCreatedBy", fields: [createdById], references: [id])
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   auditLogs AuditLog[]
 
   @@index([status, priorityId, createdAt])
   @@index([windowId, status])
   @@index([datePrefix, priorityId, sequenceNum])
+  @@index([clientId, createdAt])
   @@map("tickets")
+}
+
+model Client {
+  id             String   @id @default(cuid())
+  documentNumber String   @unique @map("document_number")
+  fullName       String   @map("full_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tickets Ticket[]
+
+  @@index([documentNumber])
+  @@map("clients")
 }
 
 model OperatorSession {

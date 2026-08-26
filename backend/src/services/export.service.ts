@@ -1,8 +1,7 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
-import { TicketStatus } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
-import { datePrefixToLabel, parseDatePrefix, todayPrefix } from '../utils/date.js';
+import { APP_TIMEZONE, datePrefixRange, datePrefixToLabel, parseDatePrefix, todayPrefix } from '../utils/date.js';
 import { ensureDailyOperations } from './daily-reset.service.js';
 import { ticketService } from './ticket.service.js';
 
@@ -13,20 +12,28 @@ function formatDuration(seconds: number): string {
 }
 
 function formatTs(date: Date | null | undefined): string {
-  return date ? date.toLocaleString('es-CO') : '-';
+  if (!date) return '-';
+  return date.toLocaleString('es-CO', {
+    timeZone: APP_TIMEZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function ticketWhere(fromPrefix?: string, toPrefix?: string) {
+  if (!fromPrefix && !toPrefix) return { datePrefix: todayPrefix() };
+  const prefixes = datePrefixRange(fromPrefix, toPrefix ?? fromPrefix);
+  return { datePrefix: { in: prefixes } };
 }
 
 export class ExportService {
-  async generateExcel(dateFrom?: Date, dateTo?: Date): Promise<Buffer> {
-    const prefix = !dateFrom && !dateTo ? todayPrefix() : undefined;
-    const where = prefix
-      ? { datePrefix: prefix }
-      : {
-          createdAt: {
-            ...(dateFrom && { gte: dateFrom }),
-            ...(dateTo && { lte: dateTo }),
-          },
-        };
+  async generateExcel(fromPrefix?: string, toPrefix?: string): Promise<Buffer> {
+    const where = ticketWhere(fromPrefix, toPrefix);
 
     const tickets = await prisma.ticket.findMany({
       where,
@@ -34,6 +41,7 @@ export class ExportService {
         priority: true,
         window: true,
         createdBy: { select: { fullName: true } },
+        client: { select: { fullName: true, documentNumber: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -47,6 +55,8 @@ export class ExportService {
       { header: 'Prioridad', key: 'priority', width: 16 },
       { header: 'Estado', key: 'status', width: 14 },
       { header: 'Ventanilla', key: 'window', width: 14 },
+      { header: 'Cliente', key: 'client', width: 22 },
+      { header: 'Documento', key: 'document', width: 16 },
       { header: 'Llamados', key: 'callCount', width: 10 },
       { header: 'Generado por', key: 'createdBy', width: 20 },
       { header: 'Creado', key: 'createdAt', width: 22 },
@@ -62,6 +72,8 @@ export class ExportService {
         priority: t.priority.name,
         status: t.status,
         window: t.window?.name ?? '-',
+        client: t.client?.fullName ?? '-',
+        document: t.client?.documentNumber ?? '-',
         callCount: t.callCount,
         createdBy: t.createdBy.fullName,
         createdAt: formatTs(t.createdAt),
@@ -79,120 +91,63 @@ export class ExportService {
     await ensureDailyOperations();
     const report = await ticketService.getDailyReport(dateInput);
     const workbook = new ExcelJS.Workbook();
-
-    const summary = workbook.addWorksheet('Resumen del día');
-    summary.addRow(['Informe diario de ventanillas']);
-    summary.addRow(['Fecha', report.dateLabel]);
-    summary.addRow(['Generados', report.summary.generated]);
-    summary.addRow(['Atendidos', report.summary.attended]);
-    summary.addRow(['Ausentes', report.summary.absent]);
-    summary.addRow(['Cancelados', report.summary.cancelled]);
-    summary.addRow(['Pendientes', report.summary.pending]);
-    summary.addRow([]);
-    summary.addRow(['Ventanilla', 'Número', 'Operador', 'Atendidos', 'Ausentes', 'Promedio atención']);
-
-    for (const w of report.windowReports) {
-      summary.addRow([
-        w.windowName,
-        w.windowNumber,
-        w.operator,
-        w.attended,
-        w.absent,
-        formatDuration(w.avgAttentionSeconds),
-      ]);
+    const sheet = workbook.addWorksheet('Ventanillas');
+    sheet.columns = [
+      { header: 'Ventanilla', key: 'window', width: 18 },
+      { header: 'Operador', key: 'operator', width: 22 },
+      { header: 'Atendidos', key: 'attended', width: 12 },
+      { header: 'Ausentes', key: 'absent', width: 12 },
+      { header: 'Promedio atención', key: 'avg', width: 16 },
+    ];
+    for (const row of report.windowReports) {
+      sheet.addRow({
+        window: row.windowName,
+        operator: row.operator,
+        attended: row.attended,
+        absent: row.absent,
+        avg: formatDuration(row.avgAttentionSeconds),
+      });
     }
-
-    for (const w of report.windowReports) {
-      const sheet = workbook.addWorksheet(`V${w.windowNumber}`.slice(0, 31));
-      sheet.addRow([w.windowName, `Operador: ${w.operator}`]);
-      sheet.addRow(['Atendidos', w.attended, 'Ausentes', w.absent, 'Promedio', formatDuration(w.avgAttentionSeconds)]);
-      sheet.addRow([]);
-      sheet.columns = [
-        { header: 'Turno', key: 'displayCode', width: 12 },
-        { header: 'Prioridad', key: 'priority', width: 14 },
-        { header: 'Estado', key: 'status', width: 14 },
-        { header: 'Llamados', key: 'callCount', width: 10 },
-        { header: 'Generado', key: 'createdAt', width: 20 },
-        { header: 'Llamado', key: 'calledAt', width: 20 },
-        { header: 'Inicio atención', key: 'attendingAt', width: 20 },
-        { header: 'Finalizado', key: 'finishedAt', width: 20 },
-        { header: 'Duración', key: 'duration', width: 12 },
-      ];
-
-      for (const t of w.tickets) {
-        const duration =
-          t.attendingAt && t.finishedAt
-            ? formatDuration(Math.round((t.finishedAt.getTime() - t.attendingAt.getTime()) / 1000))
-            : '-';
-        sheet.addRow({
-          displayCode: t.displayCode,
-          priority: t.priority.name,
-          status: t.status,
-          callCount: t.callCount,
-          createdAt: formatTs(t.createdAt),
-          calledAt: formatTs(t.calledAt),
-          attendingAt: formatTs(t.attendingAt),
-          finishedAt: formatTs(t.finishedAt),
-          duration,
-        });
-      }
-    }
-
-    if (report.unassigned.length > 0) {
-      const pending = workbook.addWorksheet('Sin ventanilla');
-      pending.columns = [
-        { header: 'Turno', key: 'displayCode', width: 12 },
-        { header: 'Prioridad', key: 'priority', width: 14 },
-        { header: 'Estado', key: 'status', width: 14 },
-        { header: 'Generado', key: 'createdAt', width: 20 },
-      ];
-      for (const t of report.unassigned) {
-        pending.addRow({
-          displayCode: t.displayCode,
-          priority: t.priority.name,
-          status: t.status,
-          createdAt: formatTs(t.createdAt),
-        });
-      }
-    }
-
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
   }
 
-  async generatePdf(dateFrom?: Date, dateTo?: Date): Promise<Buffer> {
-    const stats = await ticketService.getStats(dateFrom, dateTo);
-    const dateLabel = stats.datePrefix ? datePrefixToLabel(stats.datePrefix) : 'Período seleccionado';
+  async generatePdf(fromPrefix?: string, toPrefix?: string): Promise<Buffer> {
+    const where = ticketWhere(fromPrefix, toPrefix);
+    const tickets = await prisma.ticket.findMany({
+      where,
+      include: {
+        priority: true,
+        window: true,
+        client: { select: { fullName: true, documentNumber: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const label =
+      !fromPrefix && !toPrefix
+        ? datePrefixToLabel(todayPrefix())
+        : `${datePrefixToLabel(parseDatePrefix(fromPrefix))} – ${datePrefixToLabel(parseDatePrefix(toPrefix ?? fromPrefix))}`;
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 50 });
+      const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
       const chunks: Buffer[] = [];
-
-      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('data', (c) => chunks.push(c as Buffer));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.fontSize(20).text('Reporte Ejecutivo - Turnos', { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(12).text(`Fecha: ${dateLabel}`);
-      doc.text(`Generado: ${new Date().toLocaleString('es-CO')}`);
+      doc.fontSize(16).text('Reporte de turnos', { align: 'center' });
+      doc.fontSize(10).text(`Rango: ${label}`, { align: 'center' });
       doc.moveDown();
 
-      doc.fontSize(14).text('Indicadores generales');
-      doc.fontSize(11);
-      doc.text(`Turnos generados: ${stats.generated}`);
-      doc.text(`Turnos atendidos: ${stats.attended}`);
-      doc.text(`Turnos ausentes: ${stats.absent}`);
-      doc.text(`Turnos cancelados: ${stats.cancelled}`);
-      doc.moveDown();
-
-      doc.fontSize(14).text('Ranking por ventanilla');
-      doc.fontSize(11);
-      stats.windowStats.forEach((w, i) => {
-        doc.text(
-          `${i + 1}. ${w.windowName}: ${w.totalAttended} atendidos | Promedio: ${formatDuration(w.avgAttentionSeconds)} | Operador: ${w.assignedUser ?? 'Sin asignar'}`
-        );
-      });
+      for (const t of tickets) {
+        const client = t.client ? ` · ${t.client.fullName} (${t.client.documentNumber})` : '';
+        doc
+          .fontSize(9)
+          .text(
+            `${t.displayCode} | ${t.status} | ${t.priority.code} | ${t.window?.name ?? '-'} | ${formatTs(t.createdAt)}${client}`
+          );
+      }
 
       doc.end();
     });
@@ -201,53 +156,23 @@ export class ExportService {
   async generateDailyPdf(dateInput?: string): Promise<Buffer> {
     await ensureDailyOperations();
     const report = await ticketService.getDailyReport(dateInput);
-
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const doc = new PDFDocument({ margin: 40, size: 'LETTER' });
       const chunks: Buffer[] = [];
-
-      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('data', (c) => chunks.push(c as Buffer));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      doc.fontSize(18).text('Informe detallado por ventanilla', { align: 'center' });
-      doc.fontSize(12).text(`Fecha: ${report.dateLabel}`, { align: 'center' });
-      doc.text(`Generado: ${new Date().toLocaleString('es-CO')}`, { align: 'center' });
+      doc.fontSize(16).text('Informe diario por ventanilla', { align: 'center' });
+      doc.fontSize(10).text(datePrefixToLabel(report.datePrefix), { align: 'center' });
       doc.moveDown();
 
-      doc.fontSize(13).text('Resumen del día');
-      doc.fontSize(10);
-      doc.text(`Generados: ${report.summary.generated}  |  Atendidos: ${report.summary.attended}  |  Ausentes: ${report.summary.absent}`);
-      doc.text(`Cancelados: ${report.summary.cancelled}  |  Pendientes: ${report.summary.pending}`);
-      doc.moveDown();
-
-      for (const w of report.windowReports) {
-        doc.fontSize(12).text(`${w.windowName} (Ventanilla ${w.windowNumber})`, { underline: true });
-        doc.fontSize(10);
-        doc.text(`Operador: ${w.operator}`);
-        doc.text(`Atendidos: ${w.attended}  |  Ausentes: ${w.absent}  |  Promedio: ${formatDuration(w.avgAttentionSeconds)}`);
-        doc.moveDown(0.5);
-
-        if (w.tickets.length === 0) {
-          doc.text('Sin turnos registrados.');
-        } else {
-          for (const t of w.tickets) {
-            const line = `${t.displayCode} · ${t.priority.name} · ${t.status} · Llamados: ${t.callCount}`;
-            doc.text(line);
-            if (t.calledAt) doc.text(`   Llamado: ${formatTs(t.calledAt)}`, { indent: 10 });
-            if (t.finishedAt) doc.text(`   Finalizado: ${formatTs(t.finishedAt)}`, { indent: 10 });
-          }
-        }
-        doc.moveDown();
-      }
-
-      if (report.unassigned.length > 0) {
-        doc.addPage();
-        doc.fontSize(12).text('Turnos sin ventanilla asignada', { underline: true });
-        doc.fontSize(10);
-        for (const t of report.unassigned) {
-          doc.text(`${t.displayCode} · ${t.priority.name} · ${t.status}`);
-        }
+      for (const row of report.windowReports) {
+        doc
+          .fontSize(10)
+          .text(
+            `${row.windowName} · ${row.operator} · Atendidos: ${row.attended} · Ausentes: ${row.absent} · Prom: ${formatDuration(row.avgAttentionSeconds)}`
+          );
       }
 
       doc.end();

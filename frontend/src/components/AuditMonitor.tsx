@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket, TicketMonitorData, TicketStatus } from '../types';
+import { formatBogotaDateTime, formatBogotaTime } from '../utils/datetime';
 import { Card } from './Layout';
 
 interface AuditLog {
@@ -97,6 +98,28 @@ export function AuditMonitor() {
     setLoading(false);
   }, []);
 
+  async function cancelTicket(t: Ticket) {
+    const reasons = [
+      'Error de generación',
+      'Turno duplicado',
+      'Usuario se retiró',
+      'Otro',
+    ];
+    const ok = window.confirm(`¿Cancelar el turno ${t.displayCode}?`);
+    if (!ok) return;
+    const reason =
+      window.prompt(`Motivo (opcional):\n- ${reasons.join('\n- ')}`, reasons[0]) ?? undefined;
+    try {
+      await api(`/tickets/${t.id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason?.trim() || undefined }),
+      });
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'No se pudo cancelar');
+    }
+  }
+
   useEffect(() => {
     load();
     const socket = getSocket(token ?? undefined);
@@ -108,6 +131,7 @@ export function AuditMonitor() {
       'ticket:attending',
       'ticket:finished',
       'ticket:absent',
+      'ticket:cancelled',
       'window:availability-changed',
     ] as const;
     events.forEach((e) => socket.on(e, refresh));
@@ -270,7 +294,9 @@ export function AuditMonitor() {
                 <th className="py-2 pr-3">Ventanilla</th>
                 <th className="py-2 pr-3">Generado</th>
                 <th className="py-2 pr-3">Duración</th>
-                <th className="py-2">Generado por</th>
+                <th className="py-2 pr-3">Cliente</th>
+                <th className="py-2 pr-3">Generado por</th>
+                <th className="py-2">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -290,12 +316,33 @@ export function AuditMonitor() {
                     {t.window ? `Vent. ${t.window.number}` : '—'}
                   </td>
                   <td className="py-2.5 pr-3 text-slate-600 whitespace-nowrap">
-                    {new Date(t.createdAt).toLocaleTimeString('es-CO')}
+                    {formatBogotaTime(t.createdAt)}
                   </td>
                   <td className="py-2.5 pr-3 font-medium whitespace-nowrap">
                     {durationLabel(t, now)}
                   </td>
+                  <td className="py-2.5 text-slate-500 text-xs">
+                    {t.client ? (
+                      <span>
+                        {t.client.fullName}
+                        <span className="block text-[10px]">{t.client.documentNumber}</span>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="py-2.5 text-slate-500 text-xs">{t.createdBy?.fullName ?? '—'}</td>
+                  <td className="py-2.5">
+                    {['GENERADO', 'LLAMADO', 'ATENDIENDO'].includes(t.status) && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-red-700 hover:underline"
+                        onClick={() => cancelTicket(t)}
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -313,7 +360,7 @@ export function AuditMonitor() {
             <div key={log.id} className="p-3 bg-slate-50 rounded-lg text-sm">
               <div className="flex justify-between gap-2">
                 <span className="font-medium">{log.action}</span>
-                <span className="text-slate-400 shrink-0">{new Date(log.createdAt).toLocaleString('es-CO')}</span>
+                <span className="text-slate-400 shrink-0">{formatBogotaDateTime(log.createdAt)}</span>
               </div>
               <p className="text-slate-600 mt-1">
                 {log.user?.fullName && `Usuario: ${log.user.fullName}`}

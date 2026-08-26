@@ -41,12 +41,21 @@ export interface Ticket {
   callCount: number;
   priority: Priority;
   window?: Window | null;
+  client?: Client | null;
   createdAt: string;
   calledAt?: string | null;
   lastCalledAt?: string | null;
   attendingAt?: string | null;
   finishedAt?: string | null;
   createdBy?: { fullName: string };
+}
+
+export interface Client {
+  id: string;
+  documentNumber: string;
+  fullName: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TicketMonitorSummary {
@@ -157,6 +166,8 @@ export interface DayDispensation {
   priorityCode: string;
   windowName: string | null;
   windowNumber: number | null;
+  clientName?: string | null;
+  clientDocument?: string | null;
   waitSeconds: number | null;
   attentionSeconds: number | null;
 }
@@ -221,6 +232,8 @@ export interface Stats {
   absent: number;
   cancelled: number;
   datePrefix?: string;
+  fromPrefix?: string;
+  toPrefix?: string;
   windowStats: {
     windowId: string;
     windowName: string;
