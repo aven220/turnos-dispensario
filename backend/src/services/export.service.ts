@@ -55,6 +55,7 @@ export class ExportService {
       { header: 'Prioridad', key: 'priority', width: 16 },
       { header: 'Estado', key: 'status', width: 14 },
       { header: 'Ventanilla', key: 'window', width: 14 },
+      { header: 'Fórmulas', key: 'formulas', width: 10 },
       { header: 'Cliente', key: 'client', width: 22 },
       { header: 'Documento', key: 'document', width: 16 },
       { header: 'Llamados', key: 'callCount', width: 10 },
@@ -72,6 +73,7 @@ export class ExportService {
         priority: t.priority.name,
         status: t.status,
         window: t.window?.name ?? '-',
+        formulas: t.formulaCount ?? 1,
         client: t.client?.fullName ?? '-',
         document: t.client?.documentNumber ?? '-',
         callCount: t.callCount,
@@ -145,7 +147,7 @@ export class ExportService {
         doc
           .fontSize(9)
           .text(
-            `${t.displayCode} | ${t.status} | ${t.priority.code} | ${t.window?.name ?? '-'} | ${formatTs(t.createdAt)}${client}`
+            `${t.displayCode} | ${t.status} | ${t.priority.code} | fórm:${t.formulaCount ?? 1} | ${t.window?.name ?? '-'} | ${formatTs(t.createdAt)}${client}`
           );
       }
 

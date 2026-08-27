@@ -25,22 +25,27 @@ export class TicketService {
     return session;
   }
 
-  async createTicket(priorityId: string, createdById: string, ipAddress?: string, clientId?: string) {
+  async createTicket(
+    priorityId: string,
+    createdById: string,
+    ipAddress?: string,
+    formulaCount = 1
+  ) {
     await ensureDailyOperations();
     const datePrefix = todayPrefix();
 
-    if (!clientId) {
-      const err = new Error('Debe seleccionar o registrar un cliente antes de generar el turno') as Error & {
-        statusCode?: number;
-      };
+    const settings = await prisma.ticketPrintSettings.upsert({
+      where: { id: 'default' },
+      create: { id: 'default' },
+      update: {},
+    });
+    const maxFormulas = Math.max(1, settings.maxFormulas ?? 1);
+    const formulas = Number.isFinite(formulaCount) ? Math.floor(formulaCount) : 1;
+    if (formulas < 1 || formulas > maxFormulas) {
+      const err = new Error(
+        `El número de fórmulas debe estar entre 1 y ${maxFormulas}`
+      ) as Error & { statusCode?: number };
       err.statusCode = 400;
-      throw err;
-    }
-
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
-    if (!client) {
-      const err = new Error('Cliente no encontrado') as Error & { statusCode?: number };
-      err.statusCode = 404;
       throw err;
     }
 
@@ -63,7 +68,7 @@ export class TicketService {
           displayCode,
           priorityId,
           createdById,
-          clientId,
+          formulaCount: formulas,
           sequenceNum,
           datePrefix,
           status: TicketStatus.GENERADO,
@@ -79,7 +84,7 @@ export class TicketService {
     await logAudit({
       userId: createdById,
       action: 'TURNO_GENERADO',
-      details: `${ticket.displayCode} · ${client.fullName} (${client.documentNumber})`,
+      details: `${ticket.displayCode} · ${formulas} fórmula(s)`,
       ticketId: ticket.id,
       ipAddress,
     });

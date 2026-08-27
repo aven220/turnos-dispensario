@@ -184,6 +184,7 @@ export function DailyHistoryPanel({ title = 'Historial de dispensas por día' }:
                   <thead className="sticky top-0 bg-white">
                     <tr className="border-b text-left text-slate-500">
                       <th className="py-2 pr-2">Turno</th>
+                      <th className="py-2 pr-2">Fórmulas</th>
                       <th className="py-2 pr-2">Cliente</th>
                       <th className="py-2 pr-2">Prioridad</th>
                       <th className="py-2 pr-2">Ventanilla</th>
@@ -196,6 +197,7 @@ export function DailyHistoryPanel({ title = 'Historial de dispensas por día' }:
                     {detail.dispensations.map((d) => (
                       <tr key={d.id} className="border-b">
                         <td className="py-2 pr-2 font-bold text-blue-900">{d.displayCode}</td>
+                        <td className="py-2 pr-2">{d.formulaCount ?? 1}</td>
                         <td className="py-2 pr-2 text-xs">
                           {d.clientName ? (
                             <>

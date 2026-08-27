@@ -25,10 +25,18 @@ function emitTicketUpdate(event: string, ticket: unknown) {
 
 router.post('/generate', requireRoles(UserRole.FILTER, UserRole.ADMIN), async (req, res, next) => {
   try {
-    const { priorityId, clientId } = z
-      .object({ priorityId: z.string(), clientId: z.string().min(1) })
+    const { priorityId, formulaCount } = z
+      .object({
+        priorityId: z.string(),
+        formulaCount: z.coerce.number().int().min(1).optional(),
+      })
       .parse(req.body);
-    const ticket = await ticketService.createTicket(priorityId, req.user!.sub, getClientIp(req), clientId);
+    const ticket = await ticketService.createTicket(
+      priorityId,
+      req.user!.sub,
+      getClientIp(req),
+      formulaCount ?? 1
+    );
     emitTicketUpdate('ticket:created', ticket);
     res.status(201).json(ticket);
   } catch (err) {
@@ -89,6 +97,7 @@ router.patch('/print-settings', requireRoles(UserRole.ADMIN), async (req, res, n
         showFooter: z.boolean().optional(),
         footerMessage: z.string().min(1).max(200).optional(),
         messageFontScale: z.coerce.number().min(0.8).max(2.5).optional(),
+        maxFormulas: z.coerce.number().int().min(1).max(50).optional(),
       })
       .parse({
         ...req.body,

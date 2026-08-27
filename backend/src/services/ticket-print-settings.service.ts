@@ -12,6 +12,7 @@ const defaults = {
   showFooter: true,
   footerMessage: 'Espere a ser llamado en pantalla',
   messageFontScale: 1,
+  maxFormulas: 1,
 };
 
 export async function getTicketPrintSettings() {
@@ -25,9 +26,21 @@ export async function getTicketPrintSettings() {
 export type TicketPrintSettingsUpdate = Partial<typeof defaults>;
 
 export async function updateTicketPrintSettings(data: TicketPrintSettingsUpdate) {
+  const patch = { ...data };
+  if (patch.maxFormulas !== undefined) {
+    const n = Math.floor(Number(patch.maxFormulas));
+    if (!Number.isFinite(n) || n < 1 || n > 50) {
+      const err = new Error('El máximo de fórmulas debe estar entre 1 y 50') as Error & {
+        statusCode?: number;
+      };
+      err.statusCode = 400;
+      throw err;
+    }
+    patch.maxFormulas = n;
+  }
   return prisma.ticketPrintSettings.upsert({
     where: { id: SETTINGS_ID },
-    create: { id: SETTINGS_ID, ...defaults, ...data },
-    update: data,
+    create: { id: SETTINGS_ID, ...defaults, ...patch },
+    update: patch,
   });
 }

@@ -8,7 +8,6 @@ import { WindowsManager } from '../components/WindowsManager';
 import { PriorityQueueSummary } from '../components/PriorityQueueSummary';
 import { WindowMessagesPanel } from '../components/WindowMessagesPanel';
 import { AdminChatPanel } from '../components/InternalChat';
-import { ClientsAdminPanel } from '../components/ClientsAdminPanel';
 import { NumberingPanel } from '../components/NumberingPanel';
 import { Button, Card, Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +17,7 @@ import { normalizeVoicePreset } from '../utils/speech';
 import type { Priority, Stats, TicketPrintSettings, TickerMessage, TvMedia, TvSettings, User, Window } from '../types';
 import { formatDuration } from '../utils/formatDuration';
 
-type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'clients' | 'chat' | 'tv' | 'ticketPrint' | 'audit';
+type Tab = 'dashboard' | 'history' | 'users' | 'windows' | 'priorities' | 'chat' | 'tv' | 'ticketPrint' | 'audit';
 
 const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   id: 'default',
@@ -31,6 +30,7 @@ const DEFAULT_TICKET_PRINT: TicketPrintSettings = {
   showFooter: true,
   footerMessage: 'Espere a ser llamado en pantalla',
   messageFontScale: 1,
+  maxFormulas: 1,
 };
 
 export function AdminPage() {
@@ -146,6 +146,7 @@ export function AdminPage() {
           showFooter: ticketPrintDraft.showFooter,
           footerMessage: ticketPrintDraft.footerMessage.trim(),
           messageFontScale: ticketPrintDraft.messageFontScale ?? 1,
+          maxFormulas: ticketPrintDraft.maxFormulas ?? 1,
         }),
       });
       setTicketPrintSettings(settings);
@@ -525,7 +526,6 @@ export function AdminPage() {
     { id: 'users', label: 'Usuarios' },
     { id: 'windows', label: 'Ventanillas' },
     { id: 'priorities', label: 'Prioridades' },
-    { id: 'clients', label: 'Clientes' },
     { id: 'chat', label: 'Chat interno' },
     { id: 'tv', label: 'Pantalla TV' },
     { id: 'ticketPrint', label: 'Impresión turno' },
@@ -935,8 +935,6 @@ export function AdminPage() {
         </>
       )}
 
-      {tab === 'clients' && <ClientsAdminPanel />}
-
       {tab === 'chat' && <AdminChatPanel />}
 
       {tab === 'tv' && (
@@ -1237,6 +1235,29 @@ export function AdminPage() {
                 </p>
               </div>
 
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium mb-1">Máximo de fórmulas por turno</label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    className="w-28 border rounded-lg px-3 py-2"
+                    value={ticketPrintDraft.maxFormulas ?? 1}
+                    onChange={(e) =>
+                      updateTicketPrintField(
+                        'maxFormulas',
+                        Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1))
+                      )
+                    }
+                  />
+                  <Button onClick={saveTicketPrintSettings}>Guardar</Button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  El filtro podrá elegir de 1 hasta este valor. Predeterminado del sistema: 1.
+                </p>
+              </div>
+
               <div className="space-y-2 pt-2">
                 {[
                   { key: 'showHeader' as const, label: 'Mostrar título superior' },
@@ -1266,7 +1287,7 @@ export function AdminPage() {
                   footerMessage: ticketPrintDraft.footerMessage.trim(),
                 })}
               >
-                Guardar configuración
+                Guardar configuración de impresión
               </Button>
             </div>
           </Card>

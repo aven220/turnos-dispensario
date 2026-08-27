@@ -150,6 +150,7 @@ model Ticket {
   windowId      String?      @map("window_id")
   createdById   String       @map("created_by_id")
   clientId      String?      @map("client_id")
+  formulaCount  Int          @default(1) @map("formula_count")
   callCount     Int          @default(0) @map("call_count")
   sequenceNum   Int          @map("sequence_num")
   datePrefix    String       @map("date_prefix")
@@ -269,6 +270,7 @@ model TicketPrintSettings {
   showFooter      Boolean @default(true) @map("show_footer")
   footerMessage   String  @default("Espere a ser llamado en pantalla") @map("footer_message")
   messageFontScale Float  @default(1) @map("message_font_scale")
+  maxFormulas     Int     @default(1) @map("max_formulas")
 
   @@map("ticket_print_settings")
 }

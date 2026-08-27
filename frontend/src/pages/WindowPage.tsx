@@ -9,6 +9,7 @@ import type { Ticket } from '../types';
 import { playAttentionReminderBeep, unlockAttentionSound } from '../utils/attentionSound';
 import { repeatCallCooldownRemaining } from '../utils/callCooldown';
 import { formatBogotaTime } from '../utils/datetime';
+import { playPriorityMessageAlert, unlockPriorityAlertSound } from '../utils/priorityAlertSound';
 
 const ATTENTION_REMINDER_MS = 5 * 60 * 1000;
 const ATTENDING_BEEP_MS = 5 * 60 * 1000;
@@ -126,7 +127,9 @@ export function WindowPage() {
     const socket = getSocket(token ?? undefined);
     socket.emit('join:window', windowId);
     const refresh = () => loadState();
-    const onMessage = (msg: PendingWindowMessage) => setPendingMessage(msg);
+    const onMessage = (msg: PendingWindowMessage) => {
+      setPendingMessage(msg);
+    };
     socket.on('ticket:created', refresh);
     socket.on('ticket:called', refresh);
     socket.on('ticket:repeated', refresh);
@@ -152,6 +155,17 @@ export function WindowPage() {
       socket.off('window:session-ended', refresh);
     };
   }, [windowId, token, loadState, loadPendingMessage]);
+
+  // Alerta sonora mientras haya mensaje prioritario pendiente (sin solapar)
+  useEffect(() => {
+    if (!pendingMessage) return;
+    unlockPriorityAlertSound();
+    playPriorityMessageAlert();
+    const interval = setInterval(() => {
+      playPriorityMessageAlert();
+    }, 12_000);
+    return () => clearInterval(interval);
+  }, [pendingMessage?.id]);
 
   async function acknowledgeMessage() {
     if (!windowId || !pendingMessage) return;
@@ -296,6 +310,9 @@ export function WindowPage() {
             <div className="text-center py-8">
               <p className="text-slate-500">{ticket.priority.name}</p>
               <p className="text-7xl font-bold text-blue-900 my-4">{ticket.displayCode}</p>
+              <p className="text-base font-semibold text-slate-700 mb-2">
+                Fórmulas: {ticket.formulaCount ?? 1}
+              </p>
               <p className={`text-lg font-medium ${
                 ticket.status === 'LLAMADO' ? 'text-amber-600' :
                 ticket.status === 'ATENDIENDO' ? 'text-emerald-600' : 'text-slate-600'

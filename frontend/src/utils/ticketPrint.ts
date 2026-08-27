@@ -6,6 +6,7 @@ export const SAMPLE_TICKET: Ticket = {
   displayCode: 'PRI001',
   status: 'GENERADO',
   callCount: 0,
+  formulaCount: 1,
   priority: { id: 'preview', name: 'Prioritario', code: 'PRI', sortOrder: 1 },
   createdAt: new Date().toISOString(),
 };

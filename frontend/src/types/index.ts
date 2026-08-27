@@ -39,6 +39,7 @@ export interface Ticket {
   displayCode: string;
   status: TicketStatus;
   callCount: number;
+  formulaCount?: number;
   priority: Priority;
   window?: Window | null;
   client?: Client | null;
@@ -114,6 +115,7 @@ export interface TicketPrintSettings {
   showFooter: boolean;
   footerMessage: string;
   messageFontScale: number;
+  maxFormulas: number;
 }
 
 export interface TvDisplay {
@@ -168,6 +170,7 @@ export interface DayDispensation {
   windowNumber: number | null;
   clientName?: string | null;
   clientDocument?: string | null;
+  formulaCount?: number;
   waitSeconds: number | null;
   attentionSeconds: number | null;
 }

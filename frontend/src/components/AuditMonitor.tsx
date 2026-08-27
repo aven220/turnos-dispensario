@@ -294,6 +294,7 @@ export function AuditMonitor() {
                 <th className="py-2 pr-3">Ventanilla</th>
                 <th className="py-2 pr-3">Generado</th>
                 <th className="py-2 pr-3">Duración</th>
+                <th className="py-2 pr-3">Fórmulas</th>
                 <th className="py-2 pr-3">Cliente</th>
                 <th className="py-2 pr-3">Generado por</th>
                 <th className="py-2">Acción</th>
@@ -321,6 +322,7 @@ export function AuditMonitor() {
                   <td className="py-2.5 pr-3 font-medium whitespace-nowrap">
                     {durationLabel(t, now)}
                   </td>
+                  <td className="py-2.5 pr-3">{t.formulaCount ?? 1}</td>
                   <td className="py-2.5 text-slate-500 text-xs">
                     {t.client ? (
                       <span>

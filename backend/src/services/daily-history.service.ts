@@ -151,6 +151,7 @@ export async function getDispensationsForDay(datePrefix: string) {
       windowNumber: t.window?.number ?? null,
       clientName: t.client?.fullName ?? null,
       clientDocument: t.client?.documentNumber ?? null,
+      formulaCount: t.formulaCount ?? 1,
       createdAt: t.createdAt,
       calledAt: t.calledAt,
       attendingAt: t.attendingAt,
