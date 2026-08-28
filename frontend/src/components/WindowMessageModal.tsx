@@ -5,6 +5,7 @@ export interface PendingWindowMessage {
   id: string;
   message: string;
   sentAt: string;
+  windowId?: string;
   sentBy?: { fullName: string };
 }
 

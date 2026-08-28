@@ -21,6 +21,7 @@ interface WindowState {
   upcoming: Ticket[];
   queueCount: number;
   queueTotal: number;
+  pendingMessage?: PendingWindowMessage | null;
 }
 
 export function WindowPage() {
@@ -110,7 +111,7 @@ export function WindowPage() {
       const msg = await api<PendingWindowMessage | null>(`/windows/${windowId}/messages/pending`);
       setPendingMessage(msg);
     } catch {
-      setPendingMessage(null);
+      // no limpiar aquí si falla red momentánea
     }
   }, [windowId]);
 
@@ -118,18 +119,34 @@ export function WindowPage() {
     if (!windowId) return;
     const data = await api<WindowState>(`/tickets/window/${windowId}/state`);
     setState(data);
+    // Sincronizar mensaje bloqueante desde el estado del servidor
+    if (data.pendingMessage) {
+      setPendingMessage(data.pendingMessage);
+    } else {
+      setPendingMessage(null);
+    }
   }, [windowId]);
 
   useEffect(() => {
     if (!windowId) return;
     loadState();
-    loadPendingMessage();
     const socket = getSocket(token ?? undefined);
-    socket.emit('join:window', windowId);
-    const refresh = () => loadState();
-    const onMessage = (msg: PendingWindowMessage) => {
+
+    const joinWindow = () => {
+      socket.emit('join:window', windowId);
+    };
+    joinWindow();
+    socket.on('connect', joinWindow);
+
+    const refresh = () => {
+      loadState();
+    };
+    const onMessage = (msg: PendingWindowMessage & { windowId?: string }) => {
+      // Filtrar si viene por la sala general "windows"
+      if (msg.windowId && msg.windowId !== windowId) return;
       setPendingMessage(msg);
     };
+
     socket.on('ticket:created', refresh);
     socket.on('ticket:called', refresh);
     socket.on('ticket:repeated', refresh);
@@ -141,7 +158,15 @@ export function WindowPage() {
     socket.on('window:availability-changed', refresh);
     socket.on('window:message', onMessage);
     socket.on('window:session-ended', refresh);
+
+    // Respaldo por si el socket no entrega el evento
+    const poll = setInterval(() => {
+      loadPendingMessage();
+    }, 4000);
+
     return () => {
+      clearInterval(poll);
+      socket.off('connect', joinWindow);
       socket.off('ticket:created', refresh);
       socket.off('ticket:called', refresh);
       socket.off('ticket:repeated', refresh);

@@ -53,8 +53,20 @@ export const windowMessageService = {
       },
     });
 
-    getIO().to(`window:${windowId}`).emit('window:message', created);
-    getIO().to('admin').emit('window:message-sent', created);
+    const io = getIO();
+    const payload = created;
+    io.to(`window:${windowId}`).emit('window:message', payload);
+    // Respaldo: sala de todas las ventanillas (filtran por windowId en el cliente)
+    io.to('windows').emit('window:message', payload);
+    // Operadores asignados a esa ventanilla
+    const operators = await prisma.windowOperator.findMany({
+      where: { windowId },
+      select: { userId: true },
+    });
+    for (const op of operators) {
+      io.to(`user:${op.userId}`).emit('window:message', payload);
+    }
+    io.to('admin').emit('window:message-sent', created);
 
     return created;
   },
