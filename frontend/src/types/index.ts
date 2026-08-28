@@ -206,6 +206,9 @@ export interface ChatMessage {
   body: string;
   ticketId?: string | null;
   ticketDisplayCode?: string | null;
+  hasImage?: boolean;
+  imageMime?: string | null;
+  imageBytes?: number | null;
   deliveredAt?: string | null;
   readAt?: string | null;
   createdAt: string;
@@ -225,7 +228,7 @@ export interface ChatParticipant {
   role: UserRole;
   window: { id: string; name: string; number: number } | null;
   unread: number;
-  lastMessage: { body: string; createdAt: string } | null;
+  lastMessage: { body: string; createdAt: string; hasImage?: boolean } | null;
   online?: boolean;
 }
 

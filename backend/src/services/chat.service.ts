@@ -1,11 +1,37 @@
+import fs from 'fs';
+import path from 'path';
 import { TicketStatus, UserRole } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
+import {
+  absoluteChatImagePath,
+  chatImageExt,
+  CHAT_IMAGE_MAX_BYTES,
+  CHAT_UPLOADS_DIR,
+  ensureParticipantChatDir,
+} from '../middleware/chat-upload.js';
 import { getIO } from '../sockets/index.js';
 import { getOnlineUserIds, isUserOnline } from '../utils/chat-presence.js';
 
 const MESSAGE_INCLUDE = {
   sender: { select: { id: true, fullName: true, role: true } },
 } as const;
+
+type ChatMsgRow = {
+  id: string;
+  participantId: string;
+  windowId?: string | null;
+  senderId: string;
+  body: string;
+  ticketId?: string | null;
+  ticketDisplayCode?: string | null;
+  imagePath?: string | null;
+  imageMime?: string | null;
+  imageBytes?: number | null;
+  deliveredAt?: Date | null;
+  readAt?: Date | null;
+  createdAt: Date;
+  sender: { id: string; fullName: string; role: UserRole };
+};
 
 function emitChatSettings(settings: { chatEnabled: boolean; chatSoundEnabled: boolean }) {
   try {
@@ -16,19 +42,7 @@ function emitChatSettings(settings: { chatEnabled: boolean; chatSoundEnabled: bo
   }
 }
 
-function toChatPayload(msg: {
-  id: string;
-  participantId: string;
-  windowId?: string | null;
-  senderId: string;
-  body: string;
-  ticketId?: string | null;
-  ticketDisplayCode?: string | null;
-  deliveredAt?: Date | null;
-  readAt?: Date | null;
-  createdAt: Date;
-  sender: { id: string; fullName: string; role: UserRole };
-}) {
+function toChatPayload(msg: ChatMsgRow) {
   return {
     id: msg.id,
     participantId: msg.participantId,
@@ -37,6 +51,9 @@ function toChatPayload(msg: {
     body: msg.body,
     ticketId: msg.ticketId ?? null,
     ticketDisplayCode: msg.ticketDisplayCode ?? null,
+    hasImage: Boolean(msg.imagePath),
+    imageMime: msg.imagePath ? msg.imageMime ?? null : null,
+    imageBytes: msg.imagePath ? msg.imageBytes ?? null : null,
     deliveredAt: msg.deliveredAt,
     readAt: msg.readAt,
     createdAt: msg.createdAt,
@@ -44,38 +61,27 @@ function toChatPayload(msg: {
   };
 }
 
-function emitChatMessage(
-  msg: {
-    id: string;
-    participantId: string;
-    windowId?: string | null;
-    senderId: string;
-    body: string;
-    ticketId?: string | null;
-    ticketDisplayCode?: string | null;
-    deliveredAt?: Date | null;
-    readAt?: Date | null;
-    createdAt: Date;
-    sender: { id: string; fullName: string; role: UserRole };
-  },
-  participantRole: UserRole
-) {
+function emitChatMessage(msg: ChatMsgRow, participantRole: UserRole) {
   try {
     const io = getIO();
     const payload = toChatPayload(msg);
-    // Destinatario directo + sala de rol (por si el socket no está en user:id)
     io.to(`user:${msg.participantId}`).emit('chat:message', payload);
     if (participantRole !== UserRole.ADMIN) {
       io.to(`role:${participantRole}`).emit('chat:message', payload);
     }
     io.to('chat:admins').emit('chat:message', payload);
-    // También al remitente no-admin por si envía y tiene otra pestaña
     if (msg.senderId !== msg.participantId) {
       io.to(`user:${msg.senderId}`).emit('chat:message', payload);
     }
   } catch {
     // ignore
   }
+}
+
+function httpError(message: string, statusCode: number) {
+  const err = new Error(message) as Error & { statusCode?: number };
+  err.statusCode = statusCode;
+  return err;
 }
 
 export async function getChatSettings() {
@@ -106,9 +112,7 @@ export async function updateChatSettings(data: { chatEnabled?: boolean; chatSoun
 async function assertChatEnabled() {
   const settings = await getChatSettings();
   if (!settings.chatEnabled) {
-    const err = new Error('El chat interno está desactivado') as Error & { statusCode?: number };
-    err.statusCode = 403;
-    throw err;
+    throw httpError('El chat interno está desactivado', 403);
   }
   return settings;
 }
@@ -125,6 +129,24 @@ async function relatedTicketForUser(userId: string) {
 async function windowIdForUser(userId: string) {
   const assignment = await prisma.windowOperator.findUnique({ where: { userId } });
   return assignment?.windowId ?? null;
+}
+
+async function assertCanAccessThread(
+  participantId: string,
+  senderId: string,
+  senderRole: UserRole
+) {
+  const participant = await prisma.user.findUnique({ where: { id: participantId } });
+  if (!participant || participant.role === UserRole.ADMIN) {
+    throw httpError('Conversación no válida', 404);
+  }
+  if (senderRole !== UserRole.ADMIN && senderId !== participantId) {
+    throw httpError('Solo puede chatear con el administrador', 403);
+  }
+  if (senderRole === UserRole.ADMIN && senderId === participantId) {
+    throw httpError('Conversación no válida', 400);
+  }
+  return participant;
 }
 
 export async function listChatParticipants() {
@@ -151,20 +173,29 @@ export async function listChatParticipants() {
     where: { participantId: { in: users.map((u) => u.id) } },
     orderBy: { createdAt: 'desc' },
     distinct: ['participantId'],
-    select: { participantId: true, body: true, createdAt: true },
+    select: { participantId: true, body: true, imagePath: true, createdAt: true },
   });
   const lastMap = new Map(lastMessages.map((m) => [m.participantId, m]));
 
-  return users.map((u) => ({
-    id: u.id,
-    fullName: u.fullName,
-    username: u.username,
-    role: u.role,
-    window: u.windowAssignments[0]?.window ?? null,
-    unread: unreadMap.get(u.id) ?? 0,
-    lastMessage: lastMap.get(u.id) ?? null,
-    online: isUserOnline(u.id),
-  }));
+  return users.map((u) => {
+    const last = lastMap.get(u.id);
+    return {
+      id: u.id,
+      fullName: u.fullName,
+      username: u.username,
+      role: u.role,
+      window: u.windowAssignments[0]?.window ?? null,
+      unread: unreadMap.get(u.id) ?? 0,
+      lastMessage: last
+        ? {
+            body: last.imagePath && !last.body.trim() ? '📷 Imagen' : last.body,
+            createdAt: last.createdAt,
+            hasImage: Boolean(last.imagePath),
+          }
+        : null,
+      online: isUserOnline(u.id),
+    };
+  });
 }
 
 export async function listChatMessages(participantId: string, limit = 100) {
@@ -175,7 +206,11 @@ export async function listChatMessages(participantId: string, limit = 100) {
     take: Math.min(limit, 200),
   });
   const relatedTicket = await relatedTicketForUser(participantId);
-  return { messages, relatedTicket, participantId };
+  return {
+    messages: messages.map((m) => toChatPayload(m)),
+    relatedTicket,
+    participantId,
+  };
 }
 
 export async function sendChatMessage(params: {
@@ -188,34 +223,17 @@ export async function sendChatMessage(params: {
 
   const text = params.body.trim();
   if (!text) {
-    const err = new Error('El mensaje no puede estar vacío') as Error & { statusCode?: number };
-    err.statusCode = 400;
-    throw err;
+    throw httpError('El mensaje no puede estar vacío', 400);
   }
   if (text.length > 1000) {
-    const err = new Error('El mensaje es demasiado largo (máx. 1000)') as Error & { statusCode?: number };
-    err.statusCode = 400;
-    throw err;
+    throw httpError('El mensaje es demasiado largo (máx. 1000)', 400);
   }
 
-  const participant = await prisma.user.findUnique({ where: { id: params.participantId } });
-  if (!participant || participant.role === UserRole.ADMIN) {
-    const err = new Error('Conversación no válida') as Error & { statusCode?: number };
-    err.statusCode = 404;
-    throw err;
-  }
-
-  // Solo Admin ↔ Usuario: el remitente debe ser admin o el propio participante
-  if (params.senderRole !== UserRole.ADMIN && params.senderId !== params.participantId) {
-    const err = new Error('Solo puede chatear con el administrador') as Error & { statusCode?: number };
-    err.statusCode = 403;
-    throw err;
-  }
-  if (params.senderRole === UserRole.ADMIN && params.senderId === params.participantId) {
-    const err = new Error('Conversación no válida') as Error & { statusCode?: number };
-    err.statusCode = 400;
-    throw err;
-  }
+  const participant = await assertCanAccessThread(
+    params.participantId,
+    params.senderId,
+    params.senderRole
+  );
 
   const windowId = await windowIdForUser(params.participantId);
   const related = await relatedTicketForUser(params.participantId);
@@ -233,7 +251,177 @@ export async function sendChatMessage(params: {
   });
 
   emitChatMessage(created, participant.role);
-  return created;
+  return toChatPayload(created);
+}
+
+export async function sendChatImageMessage(params: {
+  participantId: string;
+  senderId: string;
+  senderRole: UserRole;
+  caption?: string;
+  file: Express.Multer.File;
+}) {
+  await assertChatEnabled();
+
+  const mime = params.file.mimetype;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+    throw httpError('Formato no permitido. Use JPG, PNG o WEBP.', 400);
+  }
+  if (params.file.size > CHAT_IMAGE_MAX_BYTES) {
+    throw httpError('La imagen supera el tamaño permitido.', 400);
+  }
+
+  const caption = (params.caption ?? '').trim();
+  if (caption.length > 1000) {
+    throw httpError('El mensaje es demasiado largo (máx. 1000)', 400);
+  }
+
+  const participant = await assertCanAccessThread(
+    params.participantId,
+    params.senderId,
+    params.senderRole
+  );
+
+  const windowId = await windowIdForUser(params.participantId);
+  const related = await relatedTicketForUser(params.participantId);
+
+  const created = await prisma.chatMessage.create({
+    data: {
+      participantId: params.participantId,
+      windowId,
+      senderId: params.senderId,
+      body: caption || '📷 Imagen',
+      ticketId: related?.id,
+      ticketDisplayCode: related?.displayCode,
+    },
+    include: MESSAGE_INCLUDE,
+  });
+
+  const dir = ensureParticipantChatDir(params.participantId);
+  const filename = `${created.id}${chatImageExt(mime)}`;
+  const absolute = path.join(dir, filename);
+  const relative = path.join(params.participantId, filename);
+
+  try {
+    fs.writeFileSync(absolute, params.file.buffer);
+  } catch {
+    await prisma.chatMessage.delete({ where: { id: created.id } });
+    throw httpError('No se pudo guardar la imagen', 500);
+  }
+
+  const updated = await prisma.chatMessage.update({
+    where: { id: created.id },
+    data: {
+      imagePath: relative,
+      imageMime: mime,
+      imageBytes: params.file.size,
+    },
+    include: MESSAGE_INCLUDE,
+  });
+
+  emitChatMessage(updated, participant.role);
+  return toChatPayload(updated);
+}
+
+export async function assertCanViewChatImage(
+  messageId: string,
+  userId: string,
+  userRole: UserRole
+) {
+  const msg = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+  if (!msg?.imagePath) {
+    throw httpError('Imagen no encontrada', 404);
+  }
+  const allowed =
+    userRole === UserRole.ADMIN || userId === msg.participantId;
+  if (!allowed) {
+    throw httpError('Acceso denegado', 403);
+  }
+  const absolute = absoluteChatImagePath(msg.imagePath);
+  if (!fs.existsSync(absolute)) {
+    throw httpError('Imagen no encontrada', 404);
+  }
+  return { msg, absolute, mime: msg.imageMime ?? 'application/octet-stream' };
+}
+
+export async function deleteChatThread(participantId: string) {
+  const participant = await prisma.user.findUnique({ where: { id: participantId } });
+  if (!participant || participant.role === UserRole.ADMIN) {
+    throw httpError('Conversación no válida', 404);
+  }
+
+  const withImages = await prisma.chatMessage.findMany({
+    where: { participantId, imagePath: { not: null } },
+    select: { imagePath: true },
+  });
+
+  for (const row of withImages) {
+    if (!row.imagePath) continue;
+    try {
+      const absolute = absoluteChatImagePath(row.imagePath);
+      if (fs.existsSync(absolute)) fs.unlinkSync(absolute);
+    } catch {
+      // continuar limpiando
+    }
+  }
+
+  const participantDir = path.join(CHAT_UPLOADS_DIR, participantId);
+  try {
+    if (fs.existsSync(participantDir)) {
+      for (const name of fs.readdirSync(participantDir)) {
+        fs.unlinkSync(path.join(participantDir, name));
+      }
+      fs.rmdirSync(participantDir);
+    }
+  } catch {
+    // ignore
+  }
+
+  const result = await prisma.chatMessage.deleteMany({ where: { participantId } });
+
+  try {
+    const io = getIO();
+    const payload = { participantId };
+    io.to(`user:${participantId}`).emit('chat:thread-deleted', payload);
+    io.to('chat:admins').emit('chat:thread-deleted', payload);
+  } catch {
+    // ignore
+  }
+
+  return { deleted: result.count };
+}
+
+function dirSizeBytes(dir: string): number {
+  if (!fs.existsSync(dir)) return 0;
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) total += dirSizeBytes(full);
+    else if (entry.isFile()) total += fs.statSync(full).size;
+  }
+  return total;
+}
+
+export async function getChatStorageUsage() {
+  const bytesOnDisk = dirSizeBytes(CHAT_UPLOADS_DIR);
+  const agg = await prisma.chatMessage.aggregate({
+    where: { imageBytes: { not: null } },
+    _sum: { imageBytes: true },
+    _count: { _all: true },
+  });
+  const imageCount = await prisma.chatMessage.count({ where: { imagePath: { not: null } } });
+  return {
+    bytes: bytesOnDisk,
+    bytesLabel: formatBytes(bytesOnDisk),
+    imageCount,
+    messageCountWithSize: agg._count._all,
+  };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export async function markChatRead(participantId: string, readerId: string, readerRole: UserRole) {

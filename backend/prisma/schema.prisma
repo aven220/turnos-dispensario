@@ -316,6 +316,9 @@ model ChatMessage {
   body              String
   ticketId          String?   @map("ticket_id")
   ticketDisplayCode String?   @map("ticket_display_code")
+  imagePath         String?   @map("image_path")
+  imageMime         String?   @map("image_mime")
+  imageBytes        Int?      @map("image_bytes")
   deliveredAt       DateTime? @map("delivered_at")
   readAt            DateTime? @map("read_at")
   createdAt         DateTime  @default(now()) @map("created_at")

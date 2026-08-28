@@ -24,6 +24,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(cors({ origin: env.CORS_ORIGIN }));
 app.use(express.json());
+// Chat images: solo vía API autenticada (no estático público)
+app.use('/uploads/chat', (_req, res) => {
+  res.status(403).json({ error: 'Acceso denegado' });
+});
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/api/health', async (_req, res) => {
