@@ -165,19 +165,28 @@ export function ChatConversation({
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const myId = user?.id;
+  const loadSeqRef = useRef(0);
+  const onUnreadChangeRef = useRef(onUnreadChange);
+  onUnreadChangeRef.current = onUnreadChange;
 
   const load = useCallback(async () => {
     if (!participantId) {
       setError('No se pudo identificar la conversación. Cierre sesión y vuelva a entrar.');
       return;
     }
+    const seq = ++loadSeqRef.current;
     try {
       const data = await api<ChatThread>(`/chat/threads/${participantId}`);
+      if (seq !== loadSeqRef.current) return;
       setMessages(data.messages.map(normalizeChatMessage));
       setRelatedTicket(data.relatedTicket);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar el chat');
+      if (seq !== loadSeqRef.current) return;
+      const msg = err instanceof Error ? err.message : 'No se pudo cargar el chat';
+      // Al cambiar de chat la petición anterior puede abortar: no mostrar eso
+      if (/failed to fetch|networkerror|abort/i.test(msg)) return;
+      setError(msg);
     }
   }, [participantId]);
 
@@ -185,11 +194,11 @@ export function ChatConversation({
     if (!participantId) return;
     try {
       await api(`/chat/threads/${participantId}/read`, { method: 'POST', body: '{}' });
-      onUnreadChange?.();
+      onUnreadChangeRef.current?.();
     } catch {
       // ignore
     }
-  }, [participantId, onUnreadChange]);
+  }, [participantId]);
 
   const ackDelivered = useCallback(
     async (msg: ChatMessage) => {
@@ -203,9 +212,19 @@ export function ChatConversation({
     [myId]
   );
 
+  // Carga inicial solo al cambiar de conversación (evita bucle de re-renders del admin)
   useEffect(() => {
-    load().then(() => markRead()).catch(() => undefined);
-  }, [load, markRead]);
+    loadSeqRef.current += 1;
+    setMessages([]);
+    setRelatedTicket(null);
+    setError('');
+    setText('');
+    setLightboxUrl(null);
+    void load().then(() => markRead());
+    return () => {
+      loadSeqRef.current += 1;
+    };
+  }, [participantId, load, markRead]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -229,12 +248,16 @@ export function ChatConversation({
         if (!muteIncomingSound && settings.chatSoundEnabled) playChatNotifySound();
         ackDelivered(normalized);
         markRead();
-        onUnreadChange?.();
+        onUnreadChangeRef.current?.();
       }
     };
+    // Solo actualizar estado local "Leído" — no recargar todo el hilo (evita parpadeo)
     const onRead = (payload: { participantId: string }) => {
       if (payload.participantId !== participantId) return;
-      load();
+      const now = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) => (m.senderId === myId && !m.readAt ? { ...m, readAt: now } : m))
+      );
     };
     const onDelivered = (payload: { id: string; participantId: string; deliveredAt: string }) => {
       if (payload.participantId !== participantId) return;
@@ -264,8 +287,6 @@ export function ChatConversation({
     settings.chatSoundEnabled,
     muteIncomingSound,
     markRead,
-    onUnreadChange,
-    load,
     ackDelivered,
   ]);
 
@@ -481,6 +502,10 @@ export function AdminChatPanel() {
     }
   }, []);
 
+  const refreshParticipants = useCallback(() => {
+    void loadParticipants();
+  }, [loadParticipants]);
+
   useEffect(() => {
     loadSettings();
     loadParticipants();
@@ -676,13 +701,11 @@ export function AdminChatPanel() {
           <Card className="lg:col-span-2">
             {selected && settings ? (
               <ChatConversation
+                key={selected.id}
                 participantId={selected.id}
                 title={`${selected.fullName} · ${roleLabel(selected.role)}`}
                 settings={settings}
-                onUnreadChange={() => {
-                  loadParticipants();
-                  loadStorage();
-                }}
+                onUnreadChange={refreshParticipants}
                 onDeleteThread={handleDeleteThread}
                 deletingThread={deleting}
               />
