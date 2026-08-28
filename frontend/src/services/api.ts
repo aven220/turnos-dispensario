@@ -39,6 +39,9 @@ export async function apiBlob(path: string): Promise<Blob> {
   const res = await fetch(`${API}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new Error('Error al descargar');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'No se pudo cargar el archivo' }));
+    throw new Error(err.error ?? 'No se pudo cargar el archivo');
+  }
   return res.blob();
 }

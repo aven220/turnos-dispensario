@@ -30,6 +30,25 @@ function deliveryLabel(m: ChatMessage, mine: boolean): string | null {
   return 'Enviado';
 }
 
+const IMAGE_BODY_MARKERS = new Set(['[imagen]', '📷 imagen', '📷imagen', 'imagen']);
+
+/** Detecta mensaje con imagen aunque falte el flag hasImage (p. ej. payload antiguo). */
+function messageHasImage(m: ChatMessage & { imagePath?: string | null }): boolean {
+  if (m.hasImage) return true;
+  if (m.imagePath) return true;
+  const body = (m.body || '').trim().toLowerCase();
+  return IMAGE_BODY_MARKERS.has(body);
+}
+
+function normalizeChatMessage(m: ChatMessage): ChatMessage {
+  return { ...m, hasImage: messageHasImage(m) };
+}
+
+function isImageOnlyBody(body: string): boolean {
+  const b = body.trim().toLowerCase();
+  return !b || IMAGE_BODY_MARKERS.has(b) || b === '📷 imagen';
+}
+
 function ChatImageThumb({
   messageId,
   mine,
@@ -41,34 +60,56 @@ function ChatImageThumb({
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
   const objectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setFailed(false);
     (async () => {
       try {
         const blob = await apiBlob(`/chat/messages/${messageId}/image`);
         if (cancelled) return;
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
         const objectUrl = URL.createObjectURL(blob);
         objectUrlRef.current = objectUrl;
         setUrl(objectUrl);
+        setLoading(false);
       } catch {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) {
+          setFailed(true);
+          setLoading(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
+    };
+  }, [messageId, retryKey]);
+
+  useEffect(() => {
+    return () => {
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = null;
       }
     };
-  }, [messageId]);
+  }, []);
 
   if (failed) {
-    return <p className={`text-xs ${mine ? 'text-blue-100' : 'text-slate-500'}`}>No se pudo cargar la imagen</p>;
+    return (
+      <button
+        type="button"
+        className={`text-xs underline mt-1 ${mine ? 'text-blue-100' : 'text-slate-600'}`}
+        onClick={() => setRetryKey((k) => k + 1)}
+      >
+        No se pudo cargar la imagen — reintentar
+      </button>
+    );
   }
-  if (!url) {
+  if (loading || !url) {
     return <p className={`text-xs ${mine ? 'text-blue-100' : 'text-slate-400'}`}>Cargando imagen…</p>;
   }
 
@@ -132,7 +173,7 @@ export function ChatConversation({
     }
     try {
       const data = await api<ChatThread>(`/chat/threads/${participantId}`);
-      setMessages(data.messages);
+      setMessages(data.messages.map(normalizeChatMessage));
       setRelatedTicket(data.relatedTicket);
       setError('');
     } catch (err) {
@@ -174,10 +215,19 @@ export function ChatConversation({
     const socket = getSocket(token ?? undefined);
     const onMessage = (msg: ChatMessage) => {
       if (msg.participantId !== participantId) return;
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-      if (msg.senderId !== myId) {
+      const normalized = normalizeChatMessage(msg);
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === normalized.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = normalizeChatMessage({ ...prev[idx], ...normalized });
+          return next;
+        }
+        return [...prev, normalized];
+      });
+      if (normalized.senderId !== myId) {
         if (!muteIncomingSound && settings.chatSoundEnabled) playChatNotifySound();
-        ackDelivered(msg);
+        ackDelivered(normalized);
         markRead();
         onUnreadChange?.();
       }
@@ -235,7 +285,8 @@ export function ChatConversation({
         method: 'POST',
         body: JSON.stringify({ body }),
       });
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      const normalized = normalizeChatMessage(msg);
+      setMessages((prev) => (prev.some((m) => m.id === normalized.id) ? prev : [...prev, normalized]));
       setText('');
       onUnreadChange?.();
     } catch (err) {
@@ -265,7 +316,8 @@ export function ChatConversation({
       const caption = text.trim();
       if (caption) fd.append('caption', caption);
       const msg = await apiUpload<ChatMessage>(`/chat/threads/${participantId}/image`, fd);
-      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      const normalized = normalizeChatMessage(msg);
+      setMessages((prev) => (prev.some((m) => m.id === normalized.id) ? prev : [...prev, normalized]));
       setText('');
       onUnreadChange?.();
     } catch (err) {
@@ -277,7 +329,6 @@ export function ChatConversation({
   }
 
   const ticketLabel = relatedTicketOverride?.displayCode ?? relatedTicket?.displayCode ?? null;
-  const showCaption = (m: ChatMessage) => Boolean(m.hasImage && m.body && m.body !== '📷 Imagen');
 
   return (
     <div className={`flex flex-col ${compact ? 'h-[380px]' : 'h-[520px]'}`}>
@@ -309,6 +360,8 @@ export function ChatConversation({
         {messages.map((m) => {
           const mine = m.senderId === myId;
           const status = deliveryLabel(m, mine);
+          const hasImage = messageHasImage(m);
+          const showText = Boolean(m.body && !isImageOnlyBody(m.body));
           return (
             <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
               <div
@@ -319,10 +372,10 @@ export function ChatConversation({
                 {!mine && (
                   <p className="text-[10px] font-semibold mb-0.5 text-slate-500">{m.sender.fullName}</p>
                 )}
-                {m.hasImage && (
+                {hasImage && (
                   <ChatImageThumb messageId={m.id} mine={mine} onOpen={setLightboxUrl} />
                 )}
-                {(!m.hasImage || showCaption(m)) && (
+                {showText && (
                   <p className="whitespace-pre-wrap break-words">{m.body}</p>
                 )}
                 <div
@@ -345,18 +398,18 @@ export function ChatConversation({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
           className="hidden"
           onChange={(e) => handleImageSelected(e.target.files?.[0])}
         />
         <button
           type="button"
-          title="Adjuntar imagen (máx. 1 MB)"
+          title="Adjuntar imagen (máx. 1 MB) — Admin y ventanilla"
           disabled={!settings.chatEnabled || sending || !participantId}
           onClick={() => fileInputRef.current?.click()}
-          className="shrink-0 px-2.5 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          className="shrink-0 px-2.5 py-2 text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
-          📷
+          Imagen
         </button>
         <input
           className="flex-1 border rounded-lg px-3 py-2 text-sm"

@@ -5,9 +5,11 @@ import { prisma } from '../config/prisma.js';
 import {
   absoluteChatImagePath,
   chatImageExt,
+  chatImageRelativePath,
   CHAT_IMAGE_MAX_BYTES,
   CHAT_UPLOADS_DIR,
   ensureParticipantChatDir,
+  sniffChatImageMime,
 } from '../middleware/chat-upload.js';
 import { getIO } from '../sockets/index.js';
 import { getOnlineUserIds, isUserOnline } from '../utils/chat-presence.js';
@@ -188,7 +190,7 @@ export async function listChatParticipants() {
       unread: unreadMap.get(u.id) ?? 0,
       lastMessage: last
         ? {
-            body: last.imagePath && !last.body.trim() ? '📷 Imagen' : last.body,
+            body: last.imagePath ? 'Imagen' : last.body,
             createdAt: last.createdAt,
             hasImage: Boolean(last.imagePath),
           }
@@ -263,8 +265,8 @@ export async function sendChatImageMessage(params: {
 }) {
   await assertChatEnabled();
 
-  const mime = params.file.mimetype;
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+  const mime = sniffChatImageMime(params.file.buffer, params.file.mimetype);
+  if (!mime) {
     throw httpError('Formato no permitido. Use JPG, PNG o WEBP.', 400);
   }
   if (params.file.size > CHAT_IMAGE_MAX_BYTES) {
@@ -290,7 +292,7 @@ export async function sendChatImageMessage(params: {
       participantId: params.participantId,
       windowId,
       senderId: params.senderId,
-      body: caption || '📷 Imagen',
+      body: caption || '[imagen]',
       ticketId: related?.id,
       ticketDisplayCode: related?.displayCode,
     },
@@ -300,7 +302,7 @@ export async function sendChatImageMessage(params: {
   const dir = ensureParticipantChatDir(params.participantId);
   const filename = `${created.id}${chatImageExt(mime)}`;
   const absolute = path.join(dir, filename);
-  const relative = path.join(params.participantId, filename);
+  const relative = chatImageRelativePath(params.participantId, filename);
 
   try {
     fs.writeFileSync(absolute, params.file.buffer);
