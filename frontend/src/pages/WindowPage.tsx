@@ -9,6 +9,7 @@ import type { Ticket } from '../types';
 import { playAttentionReminderBeep, unlockAttentionSound } from '../utils/attentionSound';
 import { repeatCallCooldownRemaining } from '../utils/callCooldown';
 import { formatBogotaTime } from '../utils/datetime';
+import { formatAttentionClock } from '../utils/formatAttentionClock';
 import { playPriorityMessageAlert, unlockPriorityAlertSound } from '../utils/priorityAlertSound';
 
 const ATTENTION_REMINDER_MS = 5 * 60 * 1000;
@@ -34,9 +35,11 @@ export function WindowPage() {
   const [repeatCooldownSec, setRepeatCooldownSec] = useState(0);
   const [showAttentionReminder, setShowAttentionReminder] = useState(false);
   const [dismissedReminderTicketId, setDismissedReminderTicketId] = useState<string | null>(null);
+  const [attentionNow, setAttentionNow] = useState(() => Date.now());
 
   const ticket = state?.activeTicket;
   const repeatOnCooldown = repeatCooldownSec > 0;
+  const showAttentionClock = ticket?.status === 'ATENDIENDO' && !!ticket.attendingAt;
 
   useEffect(() => {
     if (!ticket || ticket.status !== 'LLAMADO') {
@@ -62,6 +65,14 @@ export function WindowPage() {
       setDismissedReminderTicketId(null);
     }
   }, [ticket?.id, ticket?.status]);
+
+  // Contador visual de atención (solo UI; usa attendingAt del servidor)
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'ATENDIENDO' || !ticket.attendingAt) return;
+    setAttentionNow(Date.now());
+    const interval = setInterval(() => setAttentionNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.status, ticket?.attendingAt]);
 
   // Recordatorio sonoro cada 5 min mientras ATENDIENDO
   const lastBeepSlotRef = useRef<number>(-1);
@@ -344,6 +355,15 @@ export function WindowPage() {
               }`}>
                 {ticket.status} · Llamados: {ticket.callCount}/3
               </p>
+              {showAttentionClock && ticket.attendingAt && (
+                <p
+                  className="mt-3 text-2xl font-semibold tabular-nums tracking-wide text-slate-600"
+                  aria-live="polite"
+                  aria-label="Tiempo en atención"
+                >
+                  ⏱ {formatAttentionClock(ticket.attendingAt, attentionNow)}
+                </p>
+              )}
             </div>
           ) : (
             <div className="text-center py-16 text-slate-400">
