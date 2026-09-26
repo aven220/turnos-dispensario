@@ -224,6 +224,7 @@ export function TvPage() {
         <button
           type="button"
           onClick={enableSound}
+          onPointerDown={enableSound}
           className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm cursor-pointer"
         >
           <span className="px-10 py-4 rounded-xl bg-blue-600 text-white font-bold text-[clamp(1.25rem,4vw,2rem)] tracking-wide">

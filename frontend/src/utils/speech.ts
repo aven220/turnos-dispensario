@@ -61,23 +61,53 @@ export function isSpeechUnlocked(): boolean {
   return speechUnlocked;
 }
 
-/** Debe llamarse tras un clic/toque del usuario (política de autoplay del navegador). */
+function unlockAudioContext(): void {
+  try {
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    if (ctx.state === 'suspended') void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.04);
+    window.setTimeout(() => void ctx.close().catch(() => undefined), 200);
+  } catch {
+    // Algunos Smart TV no exponen AudioContext; se ignora.
+  }
+}
+
+/**
+ * Debe llamarse tras un clic/toque del usuario (política de autoplay).
+ * En Smart TV el desbloqueo casi silencioso no basta: hace falta un speak
+ * real dentro del gesto y, si existe, reactivar AudioContext.
+ */
 export function unlockSpeech(): void {
-  if (!('speechSynthesis' in window)) {
-    speechUnlocked = true;
+  if (speechUnlocked) {
+    if ('speechSynthesis' in window) window.speechSynthesis.resume();
     return;
   }
+
   speechUnlocked = true;
+  unlockAudioContext();
+
+  if (!('speechSynthesis' in window)) return;
+
   window.speechSynthesis.cancel();
   window.speechSynthesis.resume();
-  const utterance = new SpeechSynthesisUtterance(' ');
-  utterance.volume = 0.01;
-  utterance.rate = 2;
+
+  const utterance = new SpeechSynthesisUtterance('listo');
+  utterance.volume = 0.35;
+  utterance.rate = 1.2;
   utterance.lang = 'es-ES';
   const voice = pickVoice(loadVoices(), currentSettings);
   if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
-  wakeSpeechEngine();
 }
 
 function numberToSpanish(num: number): string {
@@ -269,7 +299,15 @@ export function listSpanishVoices(): SpeechSynthesisVoice[] {
 function pickVoice(voices: SpeechSynthesisVoice[], settings: SpeechSettings): SpeechSynthesisVoice | undefined {
   const presetId = normalizeVoicePreset(settings.voiceName);
   if (isBrowserPreset(presetId)) return undefined;
-  return findVoiceByPreset(presetId, voices);
+
+  const specific = findVoiceByPreset(presetId, voices);
+  if (specific) return specific;
+
+  // Smart TV / navegadores sin voz Google: usar cualquier voz en español disponible.
+  return (
+    voices.find((v) => normalizeLang(v.lang).startsWith('es')) ??
+    findBestSystemNeutralVoice(voices)
+  );
 }
 
 export function isBrowserDelegatedPreset(presetId: VoicePresetId): boolean {
@@ -295,6 +333,10 @@ export function getSpeechSettings(): SpeechSettings {
 function wakeSpeechEngine(): void {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.resume();
+  // En Smart TV un speak vacío con volumen 0 puede bloquear la cola de voz.
+  // Solo se usa como keep-alive si ya hay desbloqueo y no hay habla en curso.
+  if (!speechUnlocked) return;
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return;
   const voices = loadVoices();
   if (voices.length === 0) return;
   const utterance = new SpeechSynthesisUtterance('');
@@ -329,17 +371,36 @@ function speakOnce(text: string, override?: Partial<SpeechSettings>, cancelPendi
     if (cancelPending) window.speechSynthesis.cancel();
     window.speechSynthesis.resume();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = settings.rate;
-    utterance.volume = 1;
-    utterance.lang = 'es-ES';
+    const start = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = settings.rate;
+      utterance.volume = 1;
+      utterance.lang = 'es-ES';
 
-    const voice = pickVoice(loadVoices(), settings);
-    if (voice) utterance.voice = voice;
+      const voice = pickVoice(loadVoices(), settings);
+      if (voice) utterance.voice = voice;
 
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.speak(utterance);
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        resolve();
+      };
+
+      utterance.onend = done;
+      utterance.onerror = done;
+      // Algunos Smart TV no disparan onend/onerror; liberar la cola igual.
+      window.setTimeout(done, Math.max(4000, text.length * 180));
+
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        done();
+      }
+    };
+
+    // Tras resume(), algunos navegadores de TV necesitan un tick antes de speak().
+    window.setTimeout(start, speechUnlocked ? 40 : 0);
   });
 }
 
@@ -372,7 +433,7 @@ export function enqueueCallSpeech(key: string, text: string): void {
     announced.clear();
     keep.forEach((k) => announced.add(k));
   }
-  wakeSpeechEngine();
+  if ('speechSynthesis' in window) window.speechSynthesis.resume();
   queue.push(text);
   processQueue();
 }
