@@ -3,7 +3,9 @@ import { useTurnoActualHighlight } from '../hooks/useTurnoActualHighlight';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 import type { Ticket, TvDisplay } from '../types';
+import { TvAudioDiagnostics } from '../components/TvAudioDiagnostics';
 import {
+  buildCallClips,
   buildCallMessage,
   enqueueCallSpeech,
   initSpeech,
@@ -21,7 +23,8 @@ function announceTicket(ticket: Ticket) {
   if (!ticket.window) return;
   const key = `${ticket.id}-${ticket.callCount}`;
   const msg = buildCallMessage(ticket.displayCode, ticket.window.number, ticket.callCount);
-  enqueueCallSpeech(key, msg);
+  const clips = buildCallClips(ticket.displayCode, ticket.window.number, ticket.callCount);
+  enqueueCallSpeech(key, msg, clips);
 }
 
 function RecentCallRow({ ticket }: { ticket: Ticket }) {
@@ -87,6 +90,7 @@ export function TvPage() {
   const [mediaIndex, setMediaIndex] = useState(0);
   const [now, setNow] = useState(() => new Date());
   const [soundReady, setSoundReady] = useState(() => isSpeechUnlocked());
+  const [showAudioDiagnostics] = useState(() => new URLSearchParams(window.location.search).has('diag'));
   const { highlighted, highlight, clearIfTicket } = useTurnoActualHighlight();
 
   function enableSound() {
@@ -223,6 +227,7 @@ export function TvPage() {
       {!soundReady && (
         <button
           type="button"
+          autoFocus
           onClick={enableSound}
           onPointerDown={enableSound}
           className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm cursor-pointer"
@@ -232,6 +237,7 @@ export function TvPage() {
           </span>
         </button>
       )}
+      {showAudioDiagnostics && <TvAudioDiagnostics />}
       <header className="shrink-0 bg-gradient-to-r from-blue-800 via-blue-700 to-blue-800 border-b border-blue-600 py-3 sm:py-4 lg:py-5 px-4 sm:px-6 text-center">
         <h1
           className="font-bold uppercase text-white tracking-[0.08em] sm:tracking-[0.15em] lg:tracking-[0.2em] leading-tight break-words"

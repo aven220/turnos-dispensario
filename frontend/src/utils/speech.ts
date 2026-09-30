@@ -61,31 +61,61 @@ export function isSpeechUnlocked(): boolean {
   return speechUnlocked;
 }
 
-function unlockAudioContext(): void {
+/**
+ * 'speech' = voz del navegador (speechSynthesis).
+ * 'clips' = audios pregrabados en /audio/voz, para navegadores de TV sin motor de voz.
+ */
+type VoiceMode = 'speech' | 'clips';
+let voiceMode: VoiceMode = 'speech';
+let lastSpeechError = '';
+
+const CLIP_BASE = '/audio/voz/';
+let audioCtx: AudioContext | null = null;
+let clipElement: HTMLAudioElement | null = null;
+const clipBuffers = new Map<string, Promise<AudioBuffer | null>>();
+
+function getAudioContextClass(): typeof AudioContext | undefined {
+  return (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  );
+}
+
+/** Crea (dentro del gesto) un único AudioContext que se mantiene abierto para los clips. */
+function unlockAudioOutput(): void {
   try {
-    const AC =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
-    if (ctx.state === 'suspended') void ctx.resume();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    gain.gain.value = 0.0001;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.04);
-    window.setTimeout(() => void ctx.close().catch(() => undefined), 200);
+    const AC = getAudioContextClass();
+    if (AC) {
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === 'suspended') void audioCtx.resume();
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+      return;
+    }
   } catch {
-    // Algunos Smart TV no exponen AudioContext; se ignora.
+    audioCtx = null;
   }
+  try {
+    clipElement = new Audio(`${CLIP_BASE}silencio.wav`);
+    void clipElement.play().catch(() => undefined);
+  } catch {
+    clipElement = null;
+  }
+}
+
+function switchToClips(reason: string): void {
+  if (voiceMode === 'clips') return;
+  voiceMode = 'clips';
+  lastSpeechError = reason;
 }
 
 /**
  * Debe llamarse tras un clic/toque del usuario (política de autoplay).
- * En Smart TV el desbloqueo casi silencioso no basta: hace falta un speak
- * real dentro del gesto y, si existe, reactivar AudioContext.
+ * Comprueba si el navegador realmente puede hablar; si no (habitual en Smart TV),
+ * las llamadas se reproducen con los clips pregrabados.
  */
 export function unlockSpeech(): void {
   if (speechUnlocked) {
@@ -94,9 +124,12 @@ export function unlockSpeech(): void {
   }
 
   speechUnlocked = true;
-  unlockAudioContext();
+  unlockAudioOutput();
 
-  if (!('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) {
+    switchToClips('speechSynthesis no disponible');
+    return;
+  }
 
   window.speechSynthesis.cancel();
   window.speechSynthesis.resume();
@@ -107,7 +140,118 @@ export function unlockSpeech(): void {
   utterance.lang = 'es-ES';
   const voice = pickVoice(loadVoices(), currentSettings);
   if (voice) utterance.voice = voice;
-  window.speechSynthesis.speak(utterance);
+
+  let started = false;
+  utterance.onstart = () => {
+    started = true;
+  };
+  utterance.onerror = (event) => {
+    if (!started) switchToClips(`speechSynthesis error: ${event.error}`);
+  };
+  window.setTimeout(() => {
+    if (!started) switchToClips('speechSynthesis no inició la voz');
+  }, 2500);
+
+  try {
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    switchToClips(`speechSynthesis excepción: ${String(err)}`);
+  }
+}
+
+function decodeAudio(ctx: AudioContext, data: ArrayBuffer): Promise<AudioBuffer | null> {
+  return new Promise((resolve) => {
+    try {
+      const result = ctx.decodeAudioData(data, resolve, () => resolve(null));
+      if (result && typeof result.catch === 'function') result.catch(() => resolve(null));
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function loadClip(ctx: AudioContext, id: string): Promise<AudioBuffer | null> {
+  let cached = clipBuffers.get(id);
+  if (!cached) {
+    cached = fetch(`${CLIP_BASE}${id}.wav`)
+      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
+      .then((data) => decodeAudio(ctx, data))
+      .catch(() => null);
+    clipBuffers.set(id, cached);
+    void cached.then((buf) => {
+      if (!buf) clipBuffers.delete(id);
+    });
+  }
+  return cached;
+}
+
+async function playClipsWithContext(ctx: AudioContext, ids: string[]): Promise<void> {
+  if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined);
+  const buffers = (await Promise.all(ids.map((id) => loadClip(ctx, id)))).filter(
+    (b): b is AudioBuffer => !!b
+  );
+  if (buffers.length === 0) return;
+
+  let at = ctx.currentTime + 0.05;
+  for (const buffer of buffers) {
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(at);
+    at += buffer.duration;
+  }
+  await new Promise((r) => setTimeout(r, (at - ctx.currentTime) * 1000 + 50));
+}
+
+function playClipWithElement(el: HTMLAudioElement, id: string): Promise<void> {
+  return new Promise((resolve) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      el.onended = null;
+      el.onerror = null;
+      resolve();
+    };
+    el.onended = done;
+    el.onerror = done;
+    window.setTimeout(done, 5000);
+    el.src = `${CLIP_BASE}${id}.wav`;
+    void el.play().catch(done);
+  });
+}
+
+async function playClips(ids: string[]): Promise<void> {
+  if (audioCtx) {
+    await playClipsWithContext(audioCtx, ids);
+    return;
+  }
+  if (!clipElement) clipElement = new Audio();
+  for (const id of ids) await playClipWithElement(clipElement, id);
+}
+
+export function testCallAudio(forceClips: boolean): void {
+  const clips = buildCallClips('GE1', 1, 1);
+  if (forceClips) {
+    void playClips(clips).catch(() => undefined);
+    return;
+  }
+  enqueueCallSpeech(`diag-${Date.now()}`, buildCallMessage('GE1', 1, 1), clips);
+}
+
+export function getAudioDiagnostics(): Record<string, string> {
+  const hasSpeech = 'speechSynthesis' in window;
+  const voices = hasSpeech ? loadVoices() : [];
+  return {
+    navegador: navigator.userAgent,
+    speechSynthesis: hasSpeech ? 'sí' : 'no',
+    voces: String(voices.length),
+    vocesEspañol: String(voices.filter((v) => normalizeLang(v.lang).startsWith('es')).length),
+    AudioContext: getAudioContextClass() ? (audioCtx?.state ?? 'sin crear') : 'no',
+    desbloqueado: speechUnlocked ? 'sí' : 'no',
+    modo: voiceMode === 'clips' ? 'audios pregrabados' : 'voz del navegador',
+    motivo: lastSpeechError || '-',
+  };
 }
 
 function numberToSpanish(num: number): string {
@@ -147,7 +291,36 @@ export function buildCallMessage(displayCode: string, windowNumber: number, call
   return `Turno ${ticketSpeech}, diríjase a la ventanilla ${windowSpeech}.`;
 }
 
-const queue: string[] = [];
+function numberToClips(num: number): string[] {
+  if (num < 100) return [`n${num}`];
+  if (num === 100) return ['cien'];
+  if (num < 1000) {
+    const rest = num % 100;
+    const hundreds = [`h${Math.floor(num / 100)}`];
+    return rest === 0 ? hundreds : [...hundreds, `n${rest}`];
+  }
+  return String(num).split('').map((d) => `n${d}`);
+}
+
+/** Misma frase que buildCallMessage, expresada como secuencia de clips en /audio/voz. */
+export function buildCallClips(displayCode: string, windowNumber: number, callCount: number): string[] {
+  const match = displayCode.match(/^([A-Za-z]+)(\d+)$/);
+  const ticketClips = match
+    ? [
+        ...match[1].toLowerCase().split('').filter((l) => l >= 'a' && l <= 'z').map((l) => `letra-${l}`),
+        ...numberToClips(parseInt(match[2], 10)),
+      ]
+    : [];
+  const intro = callCount === 2 ? 'segunda' : callCount === 3 ? 'tercera' : callCount > 3 ? 'llamada' : 'turno';
+  return [intro, ...ticketClips, 'ventanilla', ...numberToClips(windowNumber)];
+}
+
+interface QueuedCall {
+  text: string;
+  clips?: string[];
+}
+
+const queue: QueuedCall[] = [];
 let processing = false;
 const announced = new Set<string>();
 let initialized = false;
@@ -388,7 +561,12 @@ function speakOnce(text: string, override?: Partial<SpeechSettings>, cancelPendi
       };
 
       utterance.onend = done;
-      utterance.onerror = done;
+      utterance.onerror = (event) => {
+        if (event.error !== 'interrupted' && event.error !== 'canceled') {
+          switchToClips(`speechSynthesis error: ${event.error}`);
+        }
+        done();
+      };
       // Algunos Smart TV no disparan onend/onerror; liberar la cola igual.
       window.setTimeout(done, Math.max(4000, text.length * 180));
 
@@ -417,15 +595,22 @@ async function processQueue(): Promise<void> {
   processing = true;
 
   while (queue.length > 0) {
-    const text = queue.shift()!;
-    await speakOnce(text);
+    const call = queue.shift()!;
+    if (voiceMode === 'clips' && call.clips?.length) {
+      await playClips(call.clips).catch(() => undefined);
+    } else {
+      await speakOnce(call.text);
+      if (voiceMode === 'clips' && call.clips?.length) {
+        await playClips(call.clips).catch(() => undefined);
+      }
+    }
     await new Promise((r) => setTimeout(r, 400));
   }
 
   processing = false;
 }
 
-export function enqueueCallSpeech(key: string, text: string): void {
+export function enqueueCallSpeech(key: string, text: string, clips?: string[]): void {
   if (announced.has(key)) return;
   announced.add(key);
   if (announced.size > 200) {
@@ -434,7 +619,7 @@ export function enqueueCallSpeech(key: string, text: string): void {
     keep.forEach((k) => announced.add(k));
   }
   if ('speechSynthesis' in window) window.speechSynthesis.resume();
-  queue.push(text);
+  queue.push({ text, clips });
   processQueue();
 }
 
